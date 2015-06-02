@@ -59,6 +59,7 @@
 mode: .byte 1 ; for storing the current mode
 timeCounter: .byte 2 ; Two bytes to check if 1 second has passed
 takeInput: .byte 1 ; Ability to take input (for debouncing)
+input: .byte 1 ; Input for a particular loop
 inputTime: .byte 2	;for storing the time of input
 
 .cseg
@@ -348,11 +349,26 @@ input_loop:
 
 colloop: 
 	cpi  col, 4 
-	breq  input_loop      ; If all keys are scanned, repeat. 
+	breq  end_input_loop      ; If all keys are scanned, repeat. 
 	sts  PORTL, temp4    ; Otherwise, scan a column. 
 
 	ldi   temp1, 0xFF    ; Slow down the scan operation. 
 	rjmp delay
+
+end_input_loop:
+	; Check if we had any input this loop
+	lds temp1, input
+	cpi temp1, 0
+	breq allow_input
+	; Disallow input until no input
+	ldi temp1, 0
+	sts takeInput, temp1
+	rjmp input_loop
+
+allow_input:
+	ldi temp1, 1
+	sts takeInput, temp1
+	rjmp input_loop
 
 delay:
 	dec   temp1 
@@ -412,6 +428,9 @@ press:
 	add  temp3, row 
 	add  temp3, col  ; temp1 = row*3 + col+1
 	inc temp3
+
+	ldi temp1, 1
+	sts input, temp1
 	
 	jmp convert_end
 
@@ -485,9 +504,13 @@ zero:
 	rjmp convert_end 
 	
 ; Update timer to reflect input
-; TODO: make correct for when user enters only 2 numbers
 convert_end:
 	clr temp1
+
+	; Check if we can take input
+	lds temp1, takeInput
+	cpi temp1, 1
+	brne display_input
 
 	inc counter
 
@@ -528,7 +551,6 @@ update_minutes2:
 	clr temp1
 
 	rjmp update_minutes
-	
 
 display_input:
 	; tests	
