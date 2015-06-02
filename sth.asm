@@ -23,8 +23,9 @@
 .def temp2 = r19
 .def temp3 = r20
 .def temp4 = r21
-.def timer = r22 ; Time in seconds
-.def input = r23
+.def timerM = r22 
+.def timerS = r23
+.def counter = r24
 
 .macro do_lcd_command
 	ldi r16, @0
@@ -49,15 +50,17 @@
 .macro clear
 	ldi YL, low(@0)
 	ldi YH, high(@0)
-	clr temp
-	st Y+, temp
-	st Y, temp
+	clr r16
+	st Y+, r16
+	st Y, r16
 .endmacro
 
 .dseg
 time: .byte 2 ; two-bytes for seconds
+mode: .byte 2 ; for storing the current mode
 timeCounter: .byte 2 ; Two bytes to check if 1 second has passed
 takeInput: .byte 1 ; Ability to take input (for debouncing)
+inputTime: .byte 2	;for storing the time of input
 
 .cseg
 .org 0
@@ -105,13 +108,22 @@ RESET:
 	sts TIMSK0,temp1		;R/C0 interrupt enable
 	sei
 
-	clr timer ; set timer to 0
+	ldi timerM, 0
+	ldi timerS, 0
+	
+	;clear up the data string
+	clear inputTime
+	clear mode
 
-	; Enable debounced input
-	ldi input, 0
-	;sts takeInput, temp1
+	;clear register for entry
+	clr counter
+	clr r30
+	clr r29
 
-	rjmp entry
+	; Jump straight to entry mode
+	jmp set_entry_mode
+
+;end of the RESET
 
 ;
 ; Send a command to the LCD (r16)
@@ -202,9 +214,17 @@ Timer0:
 
 	; Second has passed
 
-	; Enable input
-	;ldi temp3, 1
-	;sts takeInput, temp3
+	; If running mode 
+	; decrement the time
+	; If paused mode
+	; Do nothing
+	; If entry mode
+		; TODO
+		; Enable input
+		;ldi temp3, 1
+		;sts takeInput, temp3
+	; If finished 
+	; do nothing
 
 	lds r24, time
 	lds r25, time+1
@@ -212,9 +232,7 @@ Timer0:
 	
 	sts time, r24
 	sts time + 1, r25
-	
-	;rcall displayTime
-	
+		
 	; clear timeCounter
 	clr r24
 	clr r25
@@ -237,73 +255,103 @@ ENDIF:
 
 	reti
 
-displayTime:
-	do_lcd_command 0b00000001 ; clear display
-	clr temp1	;divideCounter
-	clr r26		;quotientL
-	clr r27		;quotientH
-	clr r11
-	ldi r31, '0'
-	ldi temp3, 10
-	ldi temp4, 0
-	;show the waveCounter to the lcd
-	division:
-		cp r24, temp3
-		cpc r25,temp4
-		brlo division_end 
-		sbiw r25:r24, 10
-		adiw r27:r26, 1
-		cp r24, temp3
-		cpc r25,temp4
-		brsh division
-
-	division_end:
-		push r24	
-		inc temp1
-		cp r26,temp4 ;check quotient is zero or not
-		cpc r27,temp4
-		breq display
-		mov r24, r26
-		mov r25, r27
-		clr r26
-		clr r27
-		rjmp division	
-	
-	display:
-		show:
-		pop r24
-		add r24, r31
-		do_lcd_data r24
-		cpi temp1,1
-		breq cleanUp
-		inc r11
-		cp r11,temp1		
-		brne show
-		rjmp cleanUp
-
-	cleanUp:
-		ret
 ; End interrupts
 
+; Helper functions
+
+; Display timerS
+display_time:
+	push timerM
+	push timerS
+	push temp1
+
+	rjmp convert_time
+
+convert_time:
+	; Keep dividing timerS by 60 to get timerM
+	cpi timerS, 61
+	brge divide_time
+	rjmp end_convert_time
+
+divide_time:
+	subi timerS, 60
+	inc timerM
+	rjmp convert_time
+	
+end_convert_time:
+	; Clear display
+	do_lcd_command 0b00000001
+
+	clr temp1
+	rjmp display_min
+
+display_min:
+	; First digit
+	cpi timerM, 10
+	brge divide_min
+
+	; Display first digit
+	subi temp1, -'0'
+	do_lcd_data temp1
+	; Display second digit timerM
+	subi timerM, -'0'
+	do_lcd_data timerM
+	; Display ';' separator
+	ldi temp1, ':'
+	do_lcd_data temp1
+	
+	; Finished displaying minutes, display seconds
+	clr temp1
+	rjmp display_sec
+divide_min:
+	inc temp1
+	subi timerM, 10
+	rjmp display_min
+
+display_sec:
+	cpi timerS, 10
+	brge divide_sec
+
+	; Display first digit
+	subi temp1, -'0'
+	do_lcd_data temp1
+	; Display second digit timerM
+	subi timerS, -'0'
+	do_lcd_data timerS
+
+	; Finished displaying
+	pop temp1
+	pop timerS
+	pop timerM	
+	ret
+
+divide_sec:
+	inc temp1
+	subi timerS, 10
+	rjmp display_sec
+
+; End helper functions
+
+; Microwave lifecycle modes
+
 ; Entry mode
+set_entry_mode:
+	ldi temp1, ENTRY_MODE
+	sts mode, temp1
+	jmp entry
+
 entry:
-	ldi   temp4, INITCOLMASK  ; initial column mask 
+	ldi  temp4, INITCOLMASK  ; initial column mask (temp4 = cmask)
 	ldi  col, 0      ; initial column 
-	ldi input, 0
+	rjmp colloop
 
 colloop: 
 	cpi  col, 4 
-	breq  scanFinish 
+	breq  entry      ; If all keys are scanned, repeat. 
 	sts  PORTL, temp4    ; Otherwise, scan a column. 
 
 	ldi   temp1, 0xFF    ; Slow down the scan operation. 
 	rjmp delay
-
-; Enable input to be displayed
-scanFinish:
-	ldi temp4, 1
-	sts takeInput, temp4
-	rjmp entry
 
 delay:
 	dec   temp1 
@@ -314,15 +362,16 @@ delay:
 	cpi   temp1, 0xF    ; Check if any row is low 
 	breq   nextcol 
 	      ; If yes, find which row is low 
-	ldi   temp3, INITROWMASK  ; Initialize for row check 
+	ldi   temp3, INITROWMASK  ; Initialize for row check (temp3 = rmask)
 	clr  row      ; 
+	rjmp rowloop
 
 rowloop: 
 	cpi   row, 4       
 	breq   nextcol     ; the row scan is over. 
 	mov   temp2, temp1     
 	and   temp2, temp3    ; check un-masked bit 
-	breq   convert       ; if bit is clear, the key is press
+	breq  convert       ; if bit is clear, the key is press
 	inc   row      ; else move to the next row 
 	lsl   temp3       
 	jmp   rowloop 
@@ -333,12 +382,23 @@ nextcol:          ; if row scan is over
 	jmp colloop      ; go to the next column 
 
 convert:
-; Compare with previous input value
+	cpi r31,0
+	brne press
+	
+	cp r30, row	
+	brne press	
 
-; If different: continue
+	cp r29,col
+	brne press
+ 
+goback:
+	ldi temp3,60
+	rcall sleepL
 
-; Else, ignore
-	ldi input, 1 ; Disable more input until button lifted
+	
+press:	
+	mov r30,row ;prev row
+	mov r29,col ;prev col
 
 	cpi   col, 3    ; If the pressed key is in col.3 
 	breq   letters    ; we have a letter 
@@ -346,13 +406,13 @@ convert:
 	cpi   row, 3    ; If the key is in row3,  
 	breq   symbols    ; we have a symbol or 0
 
-
-
+ 
 	mov temp3, row  ; Otherwise we have a number in 1-9 
 	lsl  temp3 
 	add  temp3, row 
-	add  temp3, col  ; temp1 = row*3 + col
-	subi temp3, -'1'
+	add  temp3, col  ; temp1 = row*3 + col'
+
+	inc counter
 	jmp convert_end
 
 letters: 
@@ -368,45 +428,73 @@ symbols:
 	breq star 
 	cpi col, 1    ; or if we have zero 
 	breq zero           
-	;ldi temp1, '#'    ; if not we have hash (we don't need hash)
+	
+	; Hash bottom:
+	; Stop the entry mode, clear up the data
+		
+	; Check the mode
+	lds temp1, mode
+	cpi temp1, ENTRY_MODE
+	breq entry_pause
+
+	cpi temp1, RUNNING_MODE
+	breq running_pause
+
+	jmp entry
+
+entry_pause:
+	;clr counter
+	;do_lcd_command 0b00000001 ; clear display
+	;clr temp3
+	;clr timerM
+	;clr timerS
+	;rcall display_time
+	;jmp entry
+
+running_pause:
+	ldi temp4, PAUSED_MODE
+	sts mode, temp4
 	jmp entry
 
 star:  
-	do_lcd_command 0b00000001 ; clear display
-
+	; TODO
 	jmp entry
 
 zero: 
 	ldi temp3, 0    ; Set to zero
-	subi temp3, -'0'
 	rjmp convert_end 
 	
-; Print to display if can take input and add to acc
+; Update timer to reflect input
 convert_end:
-	lds temp1, takeInput
-	cpi temp1, 0
-	breq sleep_loop
+	ldi temp2, 10
+	mul timerS, temp2
+	mov timerS, r0
+	add timerS, temp3
+	rjmp display_input
 
-	; Else can take input
-	ldi temp1, 0
-	sts takeInput, temp1 ; Disable input	
+display_input:	
+	rcall display_time
+	ldi temp3, 60 ; Wait 60 cycles before next input
+	rjmp sleep_loop
 
-	;do_lcd_command 0b00000001 ; clear display
-	do_lcd_data temp3
-
-	ldi temp3,60
 sleep_loop:
   	rcall sleep_5ms
   	dec temp3
   	cpi temp3, 0
   	brne sleep_loop
-
 	jmp entry
+
+sleepL:
+	rcall sleep_5ms
+	rcall sleep_1ms
+  	dec temp3
+  	cpi temp3, 0
+  	brne sleepL
+	ret
+	
 ; End Entry mode
 
-
-
-
+; End lifecycle modes
 
 
 

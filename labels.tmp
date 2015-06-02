@@ -19,43 +19,52 @@
   <FILE>D:\programs\Project\Project.map</FILE>
  </OUTPUT_FILES>
  <LABELS>
-  <time><FILE>D:\programs\Project\Project.asm</FILE><LINE>59</LINE></time>
+  <mode><FILE>D:\programs\Project\Project.asm</FILE><LINE>59</LINE></mode>
   <timeCounter><FILE>D:\programs\Project\Project.asm</FILE><LINE>60</LINE></timeCounter>
   <takeInput><FILE>D:\programs\Project\Project.asm</FILE><LINE>61</LINE></takeInput>
   <inputTime><FILE>D:\programs\Project\Project.asm</FILE><LINE>62</LINE></inputTime>
   <RESET><FILE>D:\programs\Project\Project.asm</FILE><LINE>72</LINE></RESET>
-  <Timer0><FILE>D:\programs\Project\Project.asm</FILE><LINE>193</LINE></Timer0>
-  <lcd_command><FILE>D:\programs\Project\Project.asm</FILE><LINE>128</LINE></lcd_command>
-  <lcd_wait><FILE>D:\programs\Project\Project.asm</FILE><LINE>148</LINE></lcd_wait>
-  <sleep_5ms><FILE>D:\programs\Project\Project.asm</FILE><LINE>182</LINE></sleep_5ms>
-  <sleep_1ms><FILE>D:\programs\Project\Project.asm</FILE><LINE>170</LINE></sleep_1ms>
-  <entry><FILE>D:\programs\Project\Project.asm</FILE><LINE>297</LINE></entry>
-  <lcd_data><FILE>D:\programs\Project\Project.asm</FILE><LINE>137</LINE></lcd_data>
-  <lcd_wait_loop><FILE>D:\programs\Project\Project.asm</FILE><LINE>154</LINE></lcd_wait_loop>
-  <delayloop_1ms><FILE>D:\programs\Project\Project.asm</FILE><LINE>175</LINE></delayloop_1ms>
-  <NotSecond><FILE>D:\programs\Project\Project.asm</FILE><LINE>234</LINE></NotSecond>
-  <ENDIF><FILE>D:\programs\Project\Project.asm</FILE><LINE>239</LINE></ENDIF>
-  <displayTime><FILE>D:\programs\Project\Project.asm</FILE><LINE>248</LINE></displayTime>
-  <division><FILE>D:\programs\Project\Project.asm</FILE><LINE>258</LINE></division>
-  <division_end><FILE>D:\programs\Project\Project.asm</FILE><LINE>268</LINE></division_end>
-  <display><FILE>D:\programs\Project\Project.asm</FILE><LINE>280</LINE></display>
-  <show><FILE>D:\programs\Project\Project.asm</FILE><LINE>281</LINE></show>
-  <cleanUp><FILE>D:\programs\Project\Project.asm</FILE><LINE>292</LINE></cleanUp>
-  <colloop><FILE>D:\programs\Project\Project.asm</FILE><LINE>302</LINE></colloop>
-  <delay><FILE>D:\programs\Project\Project.asm</FILE><LINE>311</LINE></delay>
-  <nextcol><FILE>D:\programs\Project\Project.asm</FILE><LINE>333</LINE></nextcol>
-  <rowloop><FILE>D:\programs\Project\Project.asm</FILE><LINE>323</LINE></rowloop>
-  <convert><FILE>D:\programs\Project\Project.asm</FILE><LINE>340</LINE></convert>
-  <press><FILE>D:\programs\Project\Project.asm</FILE><LINE>355</LINE></press>
-  <goback><FILE>D:\programs\Project\Project.asm</FILE><LINE>350</LINE></goback>
-  <sleepL><FILE>D:\programs\Project\Project.asm</FILE><LINE>432</LINE></sleepL>
-  <letters><FILE>D:\programs\Project\Project.asm</FILE><LINE>374</LINE></letters>
-  <symbols><FILE>D:\programs\Project\Project.asm</FILE><LINE>382</LINE></symbols>
-  <convert_end><FILE>D:\programs\Project\Project.asm</FILE><LINE>406</LINE></convert_end>
-  <star><FILE>D:\programs\Project\Project.asm</FILE><LINE>395</LINE></star>
-  <zero><FILE>D:\programs\Project\Project.asm</FILE><LINE>400</LINE></zero>
-  <sleep_loop><FILE>D:\programs\Project\Project.asm</FILE><LINE>425</LINE></sleep_loop>
-  <show_symbol><FILE>D:\programs\Project\Project.asm</FILE><LINE>414</LINE></show_symbol>
-  <displayNum><FILE>D:\programs\Project\Project.asm</FILE><LINE>418</LINE></displayNum>
+  <Timer0><FILE>D:\programs\Project\Project.asm</FILE><LINE>199</LINE></Timer0>
+  <lcd_command><FILE>D:\programs\Project\Project.asm</FILE><LINE>134</LINE></lcd_command>
+  <lcd_wait><FILE>D:\programs\Project\Project.asm</FILE><LINE>154</LINE></lcd_wait>
+  <sleep_5ms><FILE>D:\programs\Project\Project.asm</FILE><LINE>188</LINE></sleep_5ms>
+  <sleep_1ms><FILE>D:\programs\Project\Project.asm</FILE><LINE>176</LINE></sleep_1ms>
+  <display_time><FILE>D:\programs\Project\Project.asm</FILE><LINE>279</LINE></display_time>
+  <set_entry_mode><FILE>D:\programs\Project\Project.asm</FILE><LINE>338</LINE></set_entry_mode>
+  <lcd_data><FILE>D:\programs\Project\Project.asm</FILE><LINE>143</LINE></lcd_data>
+  <lcd_wait_loop><FILE>D:\programs\Project\Project.asm</FILE><LINE>160</LINE></lcd_wait_loop>
+  <delayloop_1ms><FILE>D:\programs\Project\Project.asm</FILE><LINE>181</LINE></delayloop_1ms>
+  <NotSecond><FILE>D:\programs\Project\Project.asm</FILE><LINE>261</LINE></NotSecond>
+  <dec_timer><FILE>D:\programs\Project\Project.asm</FILE><LINE>232</LINE></dec_timer>
+  <end_timer0><FILE>D:\programs\Project\Project.asm</FILE><LINE>266</LINE></end_timer0>
+  <dec_min><FILE>D:\programs\Project\Project.asm</FILE><LINE>239</LINE></dec_min>
+  <finished_timer><FILE>D:\programs\Project\Project.asm</FILE><LINE>249</LINE></finished_timer>
+  <add_60><FILE>D:\programs\Project\Project.asm</FILE><LINE>256</LINE></add_60>
+  <display_min><FILE>D:\programs\Project\Project.asm</FILE><LINE>289</LINE></display_min>
+  <divide_min><FILE>D:\programs\Project\Project.asm</FILE><LINE>306</LINE></divide_min>
+  <display_sec><FILE>D:\programs\Project\Project.asm</FILE><LINE>311</LINE></display_sec>
+  <divide_sec><FILE>D:\programs\Project\Project.asm</FILE><LINE>328</LINE></divide_sec>
+  <input_loop><FILE>D:\programs\Project\Project.asm</FILE><LINE>344</LINE></input_loop>
+  <colloop><FILE>D:\programs\Project\Project.asm</FILE><LINE>349</LINE></colloop>
+  <delay><FILE>D:\programs\Project\Project.asm</FILE><LINE>357</LINE></delay>
+  <nextcol><FILE>D:\programs\Project\Project.asm</FILE><LINE>380</LINE></nextcol>
+  <rowloop><FILE>D:\programs\Project\Project.asm</FILE><LINE>370</LINE></rowloop>
+  <convert><FILE>D:\programs\Project\Project.asm</FILE><LINE>386</LINE></convert>
+  <press><FILE>D:\programs\Project\Project.asm</FILE><LINE>400</LINE></press>
+  <goback><FILE>D:\programs\Project\Project.asm</FILE><LINE>395</LINE></goback>
+  <sleepL><FILE>D:\programs\Project\Project.asm</FILE><LINE>548</LINE></sleepL>
+  <letters><FILE>D:\programs\Project\Project.asm</FILE><LINE>418</LINE></letters>
+  <symbols><FILE>D:\programs\Project\Project.asm</FILE><LINE>426</LINE></symbols>
+  <convert_end><FILE>D:\programs\Project\Project.asm</FILE><LINE>489</LINE></convert_end>
+  <star><FILE>D:\programs\Project\Project.asm</FILE><LINE>463</LINE></star>
+  <zero><FILE>D:\programs\Project\Project.asm</FILE><LINE>483</LINE></zero>
+  <input_return><FILE>D:\programs\Project\Project.asm</FILE><LINE>480</LINE></input_return>
+  <entry_hash><FILE>D:\programs\Project\Project.asm</FILE><LINE>450</LINE></entry_hash>
+  <running_pause><FILE>D:\programs\Project\Project.asm</FILE><LINE>458</LINE></running_pause>
+  <display_input><FILE>D:\programs\Project\Project.asm</FILE><LINE>533</LINE></display_input>
+  <sleep_loop><FILE>D:\programs\Project\Project.asm</FILE><LINE>541</LINE></sleep_loop>
+  <update_minutes><FILE>D:\programs\Project\Project.asm</FILE><LINE>501</LINE></update_minutes>
+  <update_minutes2><FILE>D:\programs\Project\Project.asm</FILE><LINE>523</LINE></update_minutes2>
+  <divide_seconds><FILE>D:\programs\Project\Project.asm</FILE><LINE>517</LINE></divide_seconds>
  </LABELS>
 </ASSEMBLER_INFO>
