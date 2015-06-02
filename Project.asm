@@ -4,10 +4,10 @@
 .equ INITCOLMASK = 0xEF ; scan from the rightmost column,
 .equ INITROWMASK = 0x01 ; scan from the top row
 .equ ROWMASK = 0x0F ; for obtaining input from Port D
-.equ ENTRY_MODE = 0
-.equ RUNNING_MODE  = 1
-.equ PAUSED_MODE  = 2
-.equ FINISHED_MODE  = 3
+;.equ ENTRY_MODE = 0
+;.equ RUNNING_MODE  = 1
+;.equ PAUSED_MODE  = 2
+;.equ FINISHED_MODE  = 3
 .equ SECOND = 7812 ; 10**6 / 128
 .equ LCD_RS = 7
 .equ LCD_E = 6
@@ -23,7 +23,9 @@
 .def temp2 = r19
 .def temp3 = r20
 .def temp4 = r21
-.def timer = r22 ; Time in seconds
+.def timerL = r22 ; Time in seconds
+.def timerH = r23
+.def counter = r24
 
 .macro do_lcd_command
 	ldi r16, @0
@@ -48,15 +50,16 @@
 .macro clear
 	ldi YL, low(@0)
 	ldi YH, high(@0)
-	clr temp
-	st Y+, temp
-	st Y, temp
+	clr r16
+	st Y+, r16
+	st Y, r16
 .endmacro
 
 .dseg
 time: .byte 2 ; two-bytes for seconds
 timeCounter: .byte 2 ; Two bytes to check if 1 second has passed
 takeInput: .byte 1 ; Ability to take input (for debouncing)
+inputTime: .byte 2	;for storing the time of input
 
 .cseg
 .org 0
@@ -104,13 +107,19 @@ RESET:
 	sts TIMSK0,temp1		;R/C0 interrupt enable
 	sei
 
-	clr timer ; set timer to 0
+	clr timerL ; set timer to 0
+	clr timerH
+	
+	;clear up the data string
+	clear inputTime
 
-	; Enable debounced input
-	ldi temp1, 1
-	sts takeInput, temp1
+	;clear register for entry
+	clr counter
+	clr r30
+	clr r29
+	jmp entry
 
-	rjmp entry
+;end of the RESET
 
 ;
 ; Send a command to the LCD (r16)
@@ -202,8 +211,8 @@ Timer0:
 	; Second has passed
 
 	; Enable input
-	ldi temp3, 1
-	sts takeInput, temp3
+	;ldi temp3, 1
+	;sts takeInput, temp3
 
 	lds r24, time
 	lds r25, time+1
@@ -285,8 +294,8 @@ displayTime:
 ; End interrupts
 
 ; Entry mode
-entry: 
-	ldi   temp4, INITCOLMASK  ; initial column mask 
+entry:
+	ldi  temp4, INITCOLMASK  ; initial column mask (temp4 = cmask)
 	ldi  col, 0      ; initial column 
 
 
@@ -296,6 +305,9 @@ colloop:
 	sts  PORTL, temp4    ; Otherwise, scan a column. 
 
 	ldi   temp1, 0xFF    ; Slow down the scan operation. 
+	rjmp delay
+
+
 delay:
 	dec   temp1 
 	brne   delay 
@@ -305,7 +317,7 @@ delay:
 	cpi   temp1, 0xF    ; Check if any row is low 
 	breq   nextcol 
 	      ; If yes, find which row is low 
-	ldi   temp3, INITROWMASK  ; Initialize for row check 
+	ldi   temp3, INITROWMASK  ; Initialize for row check (temp3 = rmask)
 	clr  row      ; 
 
 rowloop: 
@@ -313,7 +325,7 @@ rowloop:
 	breq   nextcol     ; the row scan is over. 
 	mov   temp2, temp1     
 	and   temp2, temp3    ; check un-masked bit 
-	breq   convert       ; if bit is clear, the key is p
+	breq  convert       ; if bit is clear, the key is press
 	inc   row      ; else move to the next row 
 	lsl   temp3       
 	jmp   rowloop 
@@ -323,31 +335,48 @@ nextcol:          ; if row scan is over
 	inc col       ; increase column value 
 	jmp colloop      ; go to the next column 
 
+
+
 convert:
-; Compare with previous input value
+	cpi r31,0
+	brne press
+	
+	cp r30, row	
+	brne press	
 
-; If different: continue
+	cp r29,col
+	brne press
+ 
+	goback:
+		ldi temp3,60
+ 		rcall sleepL
+		;rcall sleep_5ms
+	
+	press:	
+	mov r30,row ;prev row
+	mov r29,col ;prev col
 
-; Else, ignore
 	cpi   col, 3    ; If the pressed key is in col.3 
 	breq   letters    ; we have a letter 
 						; If the key is not in col.3 and  					   
 	cpi   row, 3    ; If the key is in row3,  
-	breq   symbols    ; we have a symbol or 0 
+	breq   symbols    ; we have a symbol or 0
 
-	mov temp1, row  ; Otherwise we have a number in 1-9 
-	lsl  temp1 
-	add  temp1, row 
-	add  temp1, col  ; temp1 = row*3 + col
-	subi temp1, -'1'
+ 
+	mov temp3, row  ; Otherwise we have a number in 1-9 
+	lsl  temp3 
+	add  temp3, row 
+	add  temp3, col  ; temp1 = row*3 + col
+	subi temp3, -'1'
 	jmp convert_end
+
 
 letters: 
 	;convert numbers seen on LCD to full number
 	;check the row is zero to make sure it is A
 	;once is A then clear next and add the numbe up
-	ldi temp1, 'A' 
-	add temp1, row    ; Get the ASCII value for the key
+	ldi temp3, 'A' 
+	add temp3, row    ; Get the ASCII value for the key
 	jmp convert_end
 
 symbols: 
@@ -355,37 +384,60 @@ symbols:
 	breq star 
 	cpi col, 1    ; or if we have zero 
 	breq zero           
-	;ldi temp1, '#'    ; if not we have hash (we don't need hash)
+	
+	;hash bottom(stop the entry mode, clear up the data)
+	clr counter
+	do_lcd_command 0b00000001 ; clear display
+	clr temp3
+	clear inputTime
 	jmp entry
 
 star:  
-	do_lcd_command 0b00000001 ; clear display
+
 
 	jmp entry
 
 zero: 
-	ldi temp1, 0    ; Set to zero
-	subi temp1, -'0'
+	ldi temp3, 0    ; Set to zero
+	subi temp3, -'0'
 	rjmp convert_end 
 	
-; Print to display if can take input
+; Print to display if can take input and add to acc
 convert_end:
-	lds temp3, takeInput
-	cpi temp3, 1
-	brne entry
 
-	; Can take input
-	ldi temp3, 0
-	sts takeInput, temp3
+	cpi counter,4
+	brge sleep_loop
+	cpi counter,2
+	breq show_symbol
+	rjmp displayNum
 
-	;do_lcd_command 0b00000001 ; clear display
-	do_lcd_data temp1
+	show_symbol:
+		ldi temp2, ':'
+		do_lcd_data temp2
+	
+	displayNum:
+	do_lcd_data temp3
+	subi temp3, 1
+	sts inputTime, temp3
+	inc counter
 
-
+	ldi temp3,60
+sleep_loop:
+  	rcall sleep_5ms
+  	dec temp3
+  	cpi temp3, 0
+  	brne sleep_loop
 	jmp entry
+
+sleepL:
+	rcall sleep_5ms
+	rcall sleep_1ms
+  	dec temp3
+  	cpi temp3, 0
+  	brne sleepL
+	ret
+	
 ; End Entry mode
-
-
 
 
 

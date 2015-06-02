@@ -24,6 +24,7 @@
 .def temp3 = r20
 .def temp4 = r21
 .def timer = r22 ; Time in seconds
+.def input = r23
 
 .macro do_lcd_command
 	ldi r16, @0
@@ -107,8 +108,8 @@ RESET:
 	clr timer ; set timer to 0
 
 	; Enable debounced input
-	ldi temp1, 1
-	sts takeInput, temp1
+	ldi input, 0
+	;sts takeInput, temp1
 
 	rjmp entry
 
@@ -202,8 +203,8 @@ Timer0:
 	; Second has passed
 
 	; Enable input
-	ldi temp3, 1
-	sts takeInput, temp3
+	;ldi temp3, 1
+	;sts takeInput, temp3
 
 	lds r24, time
 	lds r25, time+1
@@ -285,23 +286,31 @@ displayTime:
 ; End interrupts
 
 ; Entry mode
-entry: 
+entry:
 	ldi   temp4, INITCOLMASK  ; initial column mask 
 	ldi  col, 0      ; initial column 
-
+	ldi input, 0
 
 colloop: 
 	cpi  col, 4 
-	breq  entry      ; If all keys are scanned, repeat. 
+	breq  scanFinish 
 	sts  PORTL, temp4    ; Otherwise, scan a column. 
 
 	ldi   temp1, 0xFF    ; Slow down the scan operation. 
+	rjmp delay
+
+; Enable input to be displayed
+scanFinish:
+	ldi temp4, 1
+	sts takeInput, temp4
+	rjmp entry
+
 delay:
 	dec   temp1 
 	brne   delay 
 
 	lds  temp1, PINL    ; Read PORTL 
-	andi   temp1, ROWMASK    ; Get the keypad output value 
+	andi  temp1, ROWMASK    ; Get the keypad output value 
 	cpi   temp1, 0xF    ; Check if any row is low 
 	breq   nextcol 
 	      ; If yes, find which row is low 
@@ -313,7 +322,7 @@ rowloop:
 	breq   nextcol     ; the row scan is over. 
 	mov   temp2, temp1     
 	and   temp2, temp3    ; check un-masked bit 
-	breq   convert       ; if bit is clear, the key is p
+	breq   convert       ; if bit is clear, the key is press
 	inc   row      ; else move to the next row 
 	lsl   temp3       
 	jmp   rowloop 
@@ -329,11 +338,15 @@ convert:
 ; If different: continue
 
 ; Else, ignore
+	ldi input, 1 ; Disable more input until button lifted
+
 	cpi   col, 3    ; If the pressed key is in col.3 
 	breq   letters    ; we have a letter 
 						; If the key is not in col.3 and  					   
 	cpi   row, 3    ; If the key is in row3,  
-	breq   symbols    ; we have a symbol or 0 
+	breq   symbols    ; we have a symbol or 0
+
+
 
 	mov temp3, row  ; Otherwise we have a number in 1-9 
 	lsl  temp3 
@@ -356,24 +369,32 @@ symbols:
 	cpi col, 1    ; or if we have zero 
 	breq zero           
 	;ldi temp1, '#'    ; if not we have hash (we don't need hash)
-	jmp sleep_loop
+	jmp entry
 
 star:  
 	do_lcd_command 0b00000001 ; clear display
-	jmp sleep_loop
+
+	jmp entry
 
 zero: 
 	ldi temp3, 0    ; Set to zero
 	subi temp3, -'0'
 	rjmp convert_end 
 	
-; Print to display if can take input
+; Print to display if can take input and add to acc
 convert_end:
+	lds temp1, takeInput
+	cpi temp1, 0
+	breq sleep_loop
+
+	; Else can take input
+	ldi temp1, 0
+	sts takeInput, temp1 ; Disable input	
 
 	;do_lcd_command 0b00000001 ; clear display
 	do_lcd_data temp3
 
-	ldi temp3, 100
+	ldi temp3,60
 sleep_loop:
   	rcall sleep_5ms
   	dec temp3
