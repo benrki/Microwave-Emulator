@@ -1,5 +1,5 @@
 
-AVRASM ver. 2.1.42  D:\programs\Project\Project.asm Tue Jun 02 18:43:54 2015
+AVRASM ver. 2.1.42  D:\programs\Project\Project.asm Wed Jun 03 12:13:10 2015
 
 
 EQU  SIGNATURE_000 0000001e
@@ -1416,17 +1416,27 @@ CSEG rowloop      00000125
 CSEG convert      00000132
 CSEG press        0000013c
 CSEG goback       00000138
-CSEG sleepL       00000192
-CSEG letters      00000149
-CSEG symbols      0000014d
-CSEG convert_end  00000171
-CSEG star         00000166
-CSEG zero         0000016f
-CSEG input_return 0000016d
-CSEG entry_hash   0000015b
-CSEG running_pause 00000161
-CSEG display_input 00000189
-CSEG sleep_loop   0000018c
-CSEG update_minutes 00000179
-CSEG update_minutes2 00000184
-CSEG divide_seconds 00000181
+CSEG sleepL       000001ce
+CSEG letters      0000014b
+CSEG jmp_symbols  00000149
+CSEG convert_end  000001ad
+CSEG symbols      00000189
+CSEG letter_A     00000155
+CSEG letter_B     00000158
+CSEG letter_C     0000015b
+CSEG letter_D     00000161
+CSEG add_30sec    00000167
+CSEG sub_30sec    00000177
+CSEG directly_add 00000173
+CSEG set_all_zero 00000184
+CSEG directly_sub 00000186
+CSEG star         000001a2
+CSEG zero         000001ab
+CSEG input_return 000001a9
+CSEG entry_hash   00000197
+CSEG running_pause 0000019d
+CSEG display_input 000001c5
+CSEG sleep_loop   000001c8
+CSEG update_minutes 000001b5
+CSEG update_minutes2 000001c0
+CSEG divide_seconds 000001bd
