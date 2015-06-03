@@ -13,9 +13,15 @@
 .equ LCD_E = 6
 .equ LCD_RW = 5
 .equ LCD_BE = 4
-
+.equ CLOCKWISE = 0
+.equ ANTI_CLOCKWISE = 1
 .equ F_CPU = 16000000
 .equ DELAY_1MS = F_CPU / 4 / 1000 - 4
+.equ ROT1 = '-'
+.equ ROT2 = '`'
+.equ ROT3 = '|'
+.equ ROT4 = '/'
+.equ RPM = 19530 ; 7812 * 60 / 24 ; 60s / 8 characters * 3 revolutions
 
 .def row = r16; current row number
 .def col = r17; current column number
@@ -30,6 +36,12 @@
 .macro do_lcd_command
 	ldi r16, @0
 	rcall lcd_command
+	rcall lcd_wait
+.endmacro
+
+.macro print_char
+	ldi r16, @0
+	rcall lcd_data
 	rcall lcd_wait
 .endmacro
 
@@ -58,13 +70,21 @@
 .dseg
 mode: .byte 1 ; for storing the current mode
 timeCounter: .byte 2 ; Two bytes to check if 1 second has passed
+rotCounter: .byte 2 ; Count for when to rotate
 takeInput: .byte 1 ; Ability to take input (for debouncing)
 input: .byte 1 ; Input for a particular loop
 inputTime: .byte 2	;for storing the time of input
+enteredInput: .byte 1 ; Whether we have entered any numbers in the timer
+turnRotation: .byte 1 ; Last rotation direction of the turntable
+rotChar: .byte 1 ; Number of last rotation character
 
 .cseg
 .org 0
 	jmp RESET
+
+.org 0x0002
+	;jmp EXT_INT0
+	;jmp EXT_INT1
 
 .org OVF0addr
 	jmp Timer0
@@ -78,6 +98,7 @@ RESET:
 	;initialise keyboard
 	ldi  temp1, PORTLDIR  ; PL7:4/PA3:0, out/in 
 	sts  DDRL, temp1 
+
 
 	;initialise LCD
 	ser temp1
@@ -122,6 +143,13 @@ RESET:
 	clr counter
 	clr r30
 	clr r29
+
+	; Set last spin as anti-clockwise so the first
+	; rotation is clockwise
+	ldi temp1, ANTI_CLOCKWISE
+	sts turnRotation, temp1
+	ldi temp1, 1
+	sts rotChar, temp1
 
 	; Jump straight to entry mode
 	jmp set_entry_mode
@@ -198,38 +226,99 @@ sleep_5ms:
 
 ; Interrupts
 Timer0:	
-	;in temp1, SREG
 	push temp1
 	push temp2
 	push r24
 	push r25
+	push r26
+	push r27
+	in temp1, SREG
+	push temp1
 
+	lds temp1, mode
+	cpi temp1, RUNNING_MODE
+	brne timer_end
+
+	; Increment timeCounter
 	lds r24, timeCounter
 	lds r25, timeCounter + 1
-	adiw r25:r24, 1 ; inc timeCounter by 1
+	adiw r25:r24, 1 
 	sts timeCounter, r24
 	sts timeCounter + 1, r25
 
+	; Increment the rotation counter
+	lds r26, rotCounter
+	lds r27, rotCounter + 1
+	adiw r27:r26, 1
+	sts rotCounter, r26
+	sts rotCounter + 1, r27
+
+	cpi r26, low(RPM)
+	ldi temp1, high(RPM)
+	cpc r27, temp1
+	brne check_second
+
+	clr r26
+	clr r27
+	sts rotCounter, r26
+	sts rotCounter + 1, r27
+	rjmp rotate_turntable
+
+timer_end:
+	jmp end_timer0
+
+check_second:
 	cpi r24, low(SECOND)
 	ldi temp1, high(SECOND)
 	cpc r25, temp1
-	brne NotSecond
+	brne timer_end
 
 	; Second has passed
-	; clear timeCounter
+	; Clear timeCounter
 	clr r24
 	clr r25
 	sts timeCounter, r24
 	sts timeCounter + 1, r25
 
-	lds temp1, mode
+	jmp dec_timer
 
-	; If running mode then decrement the timer(s)
-	cpi temp1, RUNNING_MODE
-	breq dec_timer
-	rjmp end_timer0
+; Print ascii of turntable in top right corner
+display_rotation:
+	rcall display_time
+	jmp check_second
 
-; Dec time
+rotate_turntable:
+	lds temp1, turnRotation
+	cpi temp1, CLOCKWISE
+	breq rotate_clockwise
+	rjmp rotate_anticlockwise
+
+rotate_clockwise:
+	lds temp1, rotChar
+	cpi temp1, 4
+	breq loop_clockwise
+	inc temp1
+	sts rotChar, temp1
+	rjmp display_rotation
+
+loop_clockwise:
+	ldi temp1, 1
+	sts rotChar, temp1
+	rjmp display_rotation
+
+rotate_anticlockwise:
+	lds temp1, rotChar
+	cpi temp1, 1
+	breq loop_anticlockwise
+	dec temp1
+	sts rotChar, temp1
+	rjmp display_rotation
+
+loop_anticlockwise:
+	ldi temp1, 4
+	sts rotChar, temp1
+	rjmp display_rotation
+
 dec_timer:
 	cpi timerS, 0
 	breq dec_min
@@ -248,28 +337,53 @@ dec_min:
 	rjmp end_timer0
 
 finished_timer:
+	lds temp1, enteredInput
 	; If no input then add 60 and return
-	cpi counter, 0
-	breq add_60
-	; TODO timer finished
+	cpi temp1, 0
+	breq add_min
+
+	ldi temp1, FINISHED_MODE
+	sts mode, temp1
+
+	; Clear display
+	do_lcd_command 0b00000001
+
+	; Display 'Done' on first line
+	print_char 'D'
+	print_char 'o'
+	print_char 'n'
+	print_char 'e'
+
+	; Display 'Remove food' on second line
+	do_lcd_command 0b11000000 ;next line
+	print_char 'R'
+	print_char 'e'
+	print_char 'm'
+	print_char 'o'
+	print_char 'v'
+	print_char 'e'
+	print_char ' '
+	print_char 'f'
+	print_char 'o'
+	print_char 'o'
+	print_char 'd'
+
 	rjmp end_timer0
 
-add_60:
-	ldi timerS, 60
+add_min:
+	ldi timerS, 59
 	rcall display_time
 	rjmp end_timer0
 
-NotSecond: ; Store in temporary counter
-	sts timeCounter, r24
-	sts timeCounter + 1, r25
-	rjmp end_timer0
-
 end_timer0:
+	pop temp1
+	out SREG, temp1
+	pop r27
+	pop r26
 	pop r25
 	pop r24
 	pop temp2
 	pop temp1
-	;out SREG,temp1
 
 	reti
 
@@ -320,16 +434,60 @@ display_sec:
 	subi timerS, -'0'
 	do_lcd_data timerS
 
-	; Finished displaying
-	pop temp1
-	pop timerS
-	pop timerM	
-	ret
+	ldi temp1, ' '
+	ldi temp2, 10; 11 spaces to display
+	rjmp display_space 
 
 divide_sec:
 	inc temp1
 	subi timerS, 10
 	rjmp display_sec
+
+; Print out whitespace to show the turntable in the upper-right
+display_space:
+	cpi temp2, 0
+	breq display_turntable
+	do_lcd_data temp1
+	dec temp2
+	rjmp display_space
+
+display_turntable:
+	lds temp1, rotChar
+	cpi temp1, 1
+	breq display_turn1
+	cpi temp1, 2
+	breq display_turn2
+	cpi temp1, 3
+	breq display_turn3
+	cpi temp1, 4
+	breq display_turn4
+
+display_turn1:
+	ldi temp1, ROT1
+	do_lcd_data temp1
+	rjmp finish_display
+
+display_turn2:
+	ldi temp1, ROT2
+	do_lcd_data temp1
+	rjmp finish_display
+
+display_turn3:
+	ldi temp1, ROT3
+	do_lcd_data temp1
+	rjmp finish_display
+
+display_turn4:
+	ldi temp1, ROT4
+	do_lcd_data temp1
+	rjmp finish_display
+
+finish_display:
+	; Finished displaying
+	pop temp1
+	pop timerS
+	pop timerM	
+	ret
 
 ; End helper functions
 
@@ -340,6 +498,8 @@ set_entry_mode:
 	ldi temp1, ENTRY_MODE
 	sts mode, temp1
 	clr counter
+	ldi temp2, 0
+	sts enteredInput, temp2
 	jmp input_loop
 
 input_loop:
@@ -423,8 +583,9 @@ press:
 	breq   letters    ; we have a letter 
 						; If the key is not in col.3 and  					   
 	cpi   row, 3    ; If the key is in row3,  
-	breq   symbols    ; we have a symbol or 0
+	breq  jmp_symbols    ; we have a symbol or 0
 
+	; Numbers
 	mov temp3, row  ; Otherwise we have a number in 1-9 
 	lsl  temp3 
 	add  temp3, row 
@@ -433,16 +594,86 @@ press:
 
 	ldi temp1, 1
 	sts input, temp1
+
+	sts enteredInput, temp1
 	
 	jmp convert_end
 
-letters: 
-	;convert numbers seen on LCD to full number
-	;check the row is zero to make sure it is A
-	;once is A then clear next and add the numbe up
-	ldi temp3, 'A' 
-	add temp3, row    ; Get the ASCII value for the key
+jmp_symbols:
+	jmp symbols
+
+letters:
+	ldi temp1, 1
+	sts input, temp1
+
+	cpi row, 0
+	breq letter_A
+	cpi row, 1
+	breq letter_B
+	cpi row, 2
+	breq letter_C
+	cpi row, 3
+	breq letter_D
+	jmp display_input
+
+letter_A:
+	ldi temp3, 'A'
 	jmp convert_end
+
+letter_B:
+	ldi temp3, 'B'
+	jmp convert_end	
+
+letter_C:
+	lds temp2, mode
+	cpi temp2, RUNNING_MODE
+	breq add_30sec
+	jmp input_loop	
+
+
+letter_D:
+	lds temp2,mode
+	cpi temp2, RUNNING_MODE
+	breq sub_30sec
+	jmp input_loop	
+
+add_30sec:
+	cpi timerS, 30		;check timerS less than 30 or not
+	brlt directly_add	;if it is then add 30 directly
+	subi timerS, 30
+	inc timerM
+	jmp display_input
+
+directly_add:
+	ldi temp2, 30
+	add timerS, temp2
+	jmp display_input
+
+sub_30sec:
+	cpi timerS,30	;check timerS bigger than 30 or not
+	brge directly_sub;if it is then sub 30
+
+	; Else check if we have minutes to subtract
+	cpi timerM, 0	;check timerM is zero or not
+	breq set_all_zero	; Set time zero
+
+	dec timerM
+	;ldi temp1, 60
+	;add timerS temp1
+	;subi timerS, 30
+
+	ldi temp2, 30;if it is not, timerS = 60 - (30 - timerS) and timerM - 1 
+	add timerS, temp2
+	
+	jmp display_input
+
+set_all_zero:
+	ldi timerS, 0
+	jmp display_input
+
+directly_sub:
+	subi timerS, 30
+	jmp display_input
 
 symbols: 
 	cpi col, 0    ; Check if we have a star 
@@ -473,8 +704,8 @@ entry_hash:
 	clr temp3
 	clr timerM
 	clr timerS
-	; BREAKS because of one of these variables
-	jmp display_input
+	;jmp set_entry_mode
+	jmp convert_end	
 
 running_pause:
 	ldi temp4, PAUSED_MODE
@@ -483,10 +714,16 @@ running_pause:
 
 star: 
 	lds temp1, mode
+	lds temp2, takeInput
 
-	;subi temp1, - '0'
+	cpi temp2, 0
+	breq input_return
+	
+	ldi temp2, 1
+	sts input, temp2
 
-	;do_lcd_data temp1
+	ldi temp2, 0
+	sts takeInput, temp2
 
 	; If we're not in entry mode then return to loop
 	;cpi temp1, ENTRY_MODE
@@ -496,6 +733,16 @@ star:
 	; Else: go to running mode
 	sts mode, temp1
 
+	lds temp1, turnRotation
+	cpi temp1, CLOCKWISE
+	breq set_anticlockwise
+	ldi temp1, CLOCKWISE
+	sts turnRotation, temp1
+	jmp input_loop
+
+set_anticlockwise:
+	ldi temp1, ANTI_CLOCKWISE	
+	sts turnRotation, temp1
 	jmp input_loop
 
 input_return:
