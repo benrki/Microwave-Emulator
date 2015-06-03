@@ -1,5 +1,5 @@
 
-AVRASM ver. 2.1.42  D:\programs\Project\Project.asm Tue Jun 02 18:43:54 2015
+AVRASM ver. 2.1.42  D:\programs\Project\Project.asm Wed Jun 03 13:07:13 2015
 
 
 EQU  SIGNATURE_000 0000001e
@@ -1386,7 +1386,8 @@ DEF  counter      r24
 DSEG mode         00000200
 DSEG timeCounter  00000201
 DSEG takeInput    00000203
-DSEG inputTime    00000204
+DSEG input        00000204
+DSEG inputTime    00000205
 CSEG RESET        00000030
 CSEG Timer0       000000a9
 CSEG lcd_command  00000073
@@ -1409,24 +1410,26 @@ CSEG divide_min   000000f8
 CSEG display_sec  000000fb
 CSEG divide_sec   00000109
 CSEG input_loop   00000112
-CSEG colloop      00000115
-CSEG delay        0000011b
-CSEG nextcol      0000012e
-CSEG rowloop      00000125
-CSEG convert      00000132
-CSEG press        0000013c
-CSEG goback       00000138
-CSEG sleepL       00000192
-CSEG letters      00000149
-CSEG symbols      0000014d
-CSEG convert_end  00000171
-CSEG star         00000166
-CSEG zero         0000016f
-CSEG input_return 0000016d
-CSEG entry_hash   0000015b
-CSEG running_pause 00000161
-CSEG display_input 00000189
-CSEG sleep_loop   0000018c
-CSEG update_minutes 00000179
-CSEG update_minutes2 00000184
-CSEG divide_seconds 00000181
+CSEG colloop      00000118
+CSEG end_input_loop 0000011e
+CSEG delay        0000012a
+CSEG allow_input  00000126
+CSEG nextcol      0000013d
+CSEG rowloop      00000134
+CSEG convert      00000141
+CSEG press        0000014b
+CSEG goback       00000147
+CSEG sleepL       000001ab
+CSEG letters      0000015b
+CSEG symbols      0000015f
+CSEG convert_end  00000183
+CSEG star         00000178
+CSEG zero         00000181
+CSEG input_return 0000017f
+CSEG entry_hash   0000016d
+CSEG running_pause 00000173
+CSEG display_input 000001a2
+CSEG sleep_loop   000001a5
+CSEG update_minutes 00000192
+CSEG update_minutes2 0000019d
+CSEG divide_seconds 0000019a

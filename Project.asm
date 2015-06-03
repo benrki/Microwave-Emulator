@@ -345,6 +345,8 @@ set_entry_mode:
 input_loop:
 	ldi  temp4, INITCOLMASK  ; initial column mask (temp4 = cmask)
 	ldi  col, 0      ; initial column 
+	ldi temp1, 0
+	sts input, temp1
 	rjmp colloop
 
 colloop: 
@@ -511,6 +513,9 @@ convert_end:
 	lds temp1, takeInput
 	cpi temp1, 1
 	brne display_input
+
+	ldi temp1, 0
+	sts takeInput, temp1
 
 	inc counter
 
