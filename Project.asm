@@ -59,6 +59,7 @@
 mode: .byte 1 ; for storing the current mode
 timeCounter: .byte 2 ; Two bytes to check if 1 second has passed
 takeInput: .byte 1 ; Ability to take input (for debouncing)
+input: .byte 1 ; Input for a particular loop
 inputTime: .byte 2	;for storing the time of input
 
 .cseg
@@ -344,15 +345,32 @@ set_entry_mode:
 input_loop:
 	ldi  temp4, INITCOLMASK  ; initial column mask (temp4 = cmask)
 	ldi  col, 0      ; initial column 
+	ldi temp1, 0
+	sts input, temp1
 	rjmp colloop
 
 colloop: 
 	cpi  col, 4 
-	breq  input_loop      ; If all keys are scanned, repeat. 
+	breq  end_input_loop      ; If all keys are scanned, repeat. 
 	sts  PORTL, temp4    ; Otherwise, scan a column. 
 
 	ldi   temp1, 0xFF    ; Slow down the scan operation. 
 	rjmp delay
+
+end_input_loop:
+	; Check if we had any input this loop
+	lds temp1, input
+	cpi temp1, 0
+	breq allow_input
+	; Disallow input until no input
+	ldi temp1, 0
+	sts takeInput, temp1
+	rjmp input_loop
+
+allow_input:
+	ldi temp1, 1
+	sts takeInput, temp1
+	rjmp input_loop
 
 delay:
 	dec   temp1 
@@ -405,97 +423,26 @@ press:
 	breq   letters    ; we have a letter 
 						; If the key is not in col.3 and  					   
 	cpi   row, 3    ; If the key is in row3,  
-	breq   jmp_symbols    ; we have a symbol or 0
+	breq   symbols    ; we have a symbol or 0
 
 	mov temp3, row  ; Otherwise we have a number in 1-9 
 	lsl  temp3 
 	add  temp3, row 
 	add  temp3, col  ; temp1 = row*3 + col+1
 	inc temp3
+
+	ldi temp1, 1
+	sts input, temp1
 	
 	jmp convert_end
-
-jmp_symbols:
-	jmp symbols
 
 letters: 
 	;convert numbers seen on LCD to full number
 	;check the row is zero to make sure it is A
 	;once is A then clear next and add the numbe up
-	;ldi temp3, 'A' 
-	;add temp3, row    ; Get the ASCII value for the key
-	cpi row, 0
-	breq letter_A
-	cpi row, 1
-	breq letter_B
-	cpi row, 2
-	breq letter_C
-	cpi row, 3
-	breq letter_D
+	ldi temp3, 'A' 
+	add temp3, row    ; Get the ASCII value for the key
 	jmp convert_end
-
-letter_A:
-	ldi temp3, 'A'
-	jmp convert_end
-
-letter_B:
-	ldi temp3, 'B'
-	jmp convert_end	
-
-letter_C:
-	lds temp2,mode
-	cpi temp2, RUNNING_MODE
-	breq add_30sec
-	jmp input_loop	
-
-
-letter_D:
-	lds temp2,mode
-	cpi temp2, RUNNING_MODE
-	breq sub_30sec
-	jmp input_loop	
-
-add_30sec:
-	ldi counter, 5
-	cpi timerS, 30		;check timerS less than 30 or not
-	brlt directly_add	;if it is then add 30 directly
-	ldi temp2, 60		;if it is not, timerS = 30-(60-timerS) and timerM + 1
-	sub	temp2, timerS
-	ldi temp4, 30
-	sub temp4, temp2
-	clr timerS
-	mov timerS, temp4
-	inc timerM
-	jmp convert_end
-
-directly_add:
-	ldi temp2, 30
-	add timerS, temp2
-	jmp convert_end
-
-sub_30sec:
-	ldi counter, 5
-	cpi timerM,0	;check timerM is zero or not
-	breq set_all_zero	;make the time to zero [?]
-	cpi timerS,30	;check timerS bigger than 30 or not
-	brge directly_sub;if it is then sub 30
-	ldi temp2,30;if it is not, timerS = 60 - (30 - timerS) and timerM - 1 
-	sub temp2,timerS
-	ldi temp4,60
-	sub temp4, temp2
-	mov timerS, temp4
-	dec timerM
-	jmp convert_end
-
-set_all_zero:
-	;ldi timerS,0
-	;clr counter
-	jmp convert_end
-
-directly_sub:
-	subi timerS, 30
-	jmp convert_end
-
 
 symbols: 
 	cpi col, 0    ; Check if we have a star 
@@ -507,7 +454,7 @@ symbols:
 	cpi col, 2
 	brne input_return
 
-	;Hash bottom:
+	; Hash bottom:
 	; Stop the entry mode, clear up the data
 		
 	; Check the mode
@@ -559,9 +506,16 @@ zero:
 	rjmp convert_end 
 	
 ; Update timer to reflect input
-; TODO: make correct for when user enters only 2 numbers
 convert_end:
 	clr temp1
+
+	; Check if we can take input
+	lds temp1, takeInput
+	cpi temp1, 1
+	brne display_input
+
+	ldi temp1, 0
+	sts takeInput, temp1
 
 	inc counter
 
@@ -602,7 +556,6 @@ update_minutes2:
 	clr temp1
 
 	rjmp update_minutes
-	
 
 display_input:
 	; tests	
