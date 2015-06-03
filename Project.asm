@@ -22,6 +22,10 @@
 .equ ROT3 = '|'
 .equ ROT4 = '/'
 .equ RPM = 19530 ; 7812 * 60 / 24 ; 60s / 8 characters * 3 revolutions
+.equ DOOR_CLOSED = 0
+.equ DOOR_OPEN = 1
+.equ LED_OFF = 0b00000001
+.equ LED_ON = 0b00000011
 
 .def row = r16; current row number
 .def col = r17; current column number
@@ -77,28 +81,48 @@ inputTime: .byte 2	;for storing the time of input
 enteredInput: .byte 1 ; Whether we have entered any numbers in the timer
 turnRotation: .byte 1 ; Last rotation direction of the turntable
 rotChar: .byte 1 ; Number of last rotation character
+doorStatus: .byte 1 ; Door open/closed
 
 .cseg
 .org 0
 	jmp RESET
 
 .org 0x0002
-	;jmp EXT_INT0
-	;jmp EXT_INT1
+	jmp EXT_INT0
+	jmp EXT_INT1
 
 .org OVF0addr
 	jmp Timer0
 
 
 RESET: 
-	ldi  temp1, low(RAMEND)  ; initialize the stack
+	; initialize the stack
+	ldi  temp1, low(RAMEND)
 	out  SPL, temp1 
 	ldi  temp1, high(RAMEND) 
 	out  SPH, temp1 
+	
 	;initialise keyboard
 	ldi  temp1, PORTLDIR  ; PL7:4/PA3:0, out/in 
 	sts  DDRL, temp1 
 
+	; set INT0 as falling-edge triggered interrupt
+	ldi temp1, (2 << ISC00)
+	sts EICRA, temp1
+	in temp1, EIMSK
+
+	; Enable INT0
+	ori temp1, (1<<INT0)
+	out EIMSK, temp1
+
+	; set INT1 as falling-edge triggered interrupt
+	ldi temp1, (2 << ISC10)
+	sts EICRA, temp1
+	in temp1, EIMSK
+	
+	; enable INT1
+	ori temp1, (1<<INT1)
+	out EIMSK, temp1
 
 	;initialise LCD
 	ser temp1
@@ -150,6 +174,10 @@ RESET:
 	sts turnRotation, temp1
 	ldi temp1, 1
 	sts rotChar, temp1
+
+	; Set door closed by default
+	ldi temp1, DOOR_CLOSED
+	sts doorStatus, temp1
 
 	; Jump straight to entry mode
 	jmp set_entry_mode
@@ -225,6 +253,60 @@ sleep_5ms:
 ;End LCD function
 
 ; Interrupts
+
+; Button on the right
+; Close door
+EXT_INT0:
+	push temp1
+	in temp1, SREG
+	push temp1
+
+	ldi temp1, DOOR_CLOSED
+	sts doorStatus, temp1
+
+	rcall display_time
+
+	pop temp1
+	out SREG, temp1
+	pop temp1
+
+	reti
+	
+; Button on the left
+; Open door
+; When finished, will enter entry mode
+; As in assignment spec, and display 00:00
+; But can't take input until door is closed!
+EXT_INT1:
+	push temp1
+	in temp1, SREG
+	push temp1
+
+	ldi temp1, DOOR_OPEN
+	sts doorStatus, temp1
+
+	lds temp1, mode
+	cpi temp1, FINISHED_MODE
+	breq set_entry
+
+	rcall display_time
+
+	jmp finish_INT1
+
+finish_INT1:
+	pop temp1
+	out SREG, temp1
+	pop temp1
+
+	reti
+
+set_entry:
+	ldi temp1, ENTRY_MODE
+	sts mode, temp1
+	rcall display_time
+	
+	jmp finish_INT1	
+
 Timer0:	
 	push temp1
 	push temp2
@@ -235,6 +317,13 @@ Timer0:
 	in temp1, SREG
 	push temp1
 
+	; Do not dec timer if door open
+	lds temp1, doorStatus
+	cpi temp1, DOOR_OPEN
+	breq timer_end
+
+	; Do not dec timer if we're not in
+	; running mode
 	lds temp1, mode
 	cpi temp1, RUNNING_MODE
 	brne timer_end
@@ -434,7 +523,6 @@ display_sec:
 	subi timerS, -'0'
 	do_lcd_data timerS
 
-	ldi temp1, ' '
 	ldi temp2, 10; 11 spaces to display
 	rjmp display_space 
 
@@ -447,7 +535,7 @@ divide_sec:
 display_space:
 	cpi temp2, 0
 	breq display_turntable
-	do_lcd_data temp1
+	print_char ' '
 	dec temp2
 	rjmp display_space
 
@@ -465,22 +553,54 @@ display_turntable:
 display_turn1:
 	ldi temp1, ROT1
 	do_lcd_data temp1
-	rjmp finish_display
+	rjmp display_2nd_line
 
 display_turn2:
 	ldi temp1, ROT2
 	do_lcd_data temp1
-	rjmp finish_display
+	rjmp display_2nd_line
 
 display_turn3:
 	ldi temp1, ROT3
 	do_lcd_data temp1
-	rjmp finish_display
+	rjmp display_2nd_line
 
 display_turn4:
 	ldi temp1, ROT4
 	do_lcd_data temp1
-	rjmp finish_display
+	rjmp display_2nd_line
+
+display_2nd_line:
+	do_lcd_command 0b11000000 ; Second line
+	ldi temp2, 15
+
+	jmp display_space_bottom
+
+; Print out whitespace to show the turntable in the upper-right
+display_space_bottom:
+	cpi temp2, 0
+	breq display_door
+	print_char ' '
+	dec temp2
+	rjmp display_space_bottom
+
+display_door:
+	lds temp1, doorStatus
+	cpi temp1, DOOR_OPEN
+	breq display_open
+	cpi temp1, DOOR_CLOSED
+	breq display_closed
+
+	jmp finish_display ; Should not occur
+
+display_open:
+	print_char 'O'
+	; todo: light top most LED
+	jmp finish_display
+
+display_closed:
+	print_char 'C'
+	jmp finish_display
 
 finish_display:
 	; Finished displaying
@@ -491,9 +611,8 @@ finish_display:
 
 ; End helper functions
 
-; Start microwave lifecycle modes
+; Start input loop
 
-; Start entry mode
 set_entry_mode:
 	ldi temp1, ENTRY_MODE
 	sts mode, temp1
@@ -503,6 +622,11 @@ set_entry_mode:
 	jmp input_loop
 
 input_loop:
+	; Take no input if door open
+	lds temp1, doorStatus
+	cpi temp1, DOOR_OPEN
+	breq input_loop
+
 	ldi  temp4, INITCOLMASK  ; initial column mask (temp4 = cmask)
 	ldi  col, 0      ; initial column 
 	ldi temp1, 0
@@ -675,42 +799,57 @@ directly_sub:
 	subi timerS, 30
 	jmp display_input
 
-symbols: 
+goToInput:
+	jmp display_input
+
+symbols:
+	; Check if we can take input
+	lds temp1, takeInput
+	cpi temp1, 1
+	brne goToInput
+
+	ldi temp1, 1
+	sts input, temp1
+
 	cpi col, 0    ; Check if we have a star 
 	breq star
 	cpi col, 1    ; or if we have zero 
-	breq zero     
+	breq zero
 
-	; Somehow is being called when not hash!
+	; Hash
 	cpi col, 2
 	brne input_return
-
-	; Hash bottom:
-	; Stop the entry mode, clear up the data
 		
 	; Check the mode
 	lds temp1, mode
-	cpi temp1, ENTRY_MODE
-	breq entry_hash
 
 	cpi temp1, RUNNING_MODE
 	breq running_pause
 
-	jmp input_loop
+	cpi temp1, ENTRY_MODE
+	breq clear_time
+
+	cpi temp1, PAUSED_MODE
+	breq clear_time
+
+	jmp display_input
 
 ; Clears the current time
-entry_hash:
+clear_time:
+	ldi temp1, ENTRY_MODE
+	sts mode, temp1
+
 	clr counter
 	clr temp3
 	clr timerM
 	clr timerS
-	;jmp set_entry_mode
-	jmp convert_end	
+	jmp display_input
 
 running_pause:
 	ldi temp4, PAUSED_MODE
 	sts mode, temp4
-	jmp input_loop
+
+	jmp display_input
 
 star: 
 	lds temp1, mode
@@ -725,12 +864,7 @@ star:
 	ldi temp2, 0
 	sts takeInput, temp2
 
-	; If we're not in entry mode then return to loop
-	;cpi temp1, ENTRY_MODE
-	;brne input_return
-
 	ldi temp1, RUNNING_MODE
-	; Else: go to running mode
 	sts mode, temp1
 
 	lds temp1, turnRotation
@@ -826,26 +960,8 @@ sleepL:
   	cpi temp3, 0
   	brne sleepL
 	ret
-	
-; End entry mode
 
-
-; Start running mode
-
-; End running mode
-
-
-; Start paused mode
-
-; End paused mode
-
-
-; Start finished mode
-
-; End finished
-
-
-; End microwave lifecycle modes
+; End input loop
 
 
 
