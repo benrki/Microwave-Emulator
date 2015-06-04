@@ -28,6 +28,9 @@
 .equ DOOR_OPEN = 1
 .equ LED_OFF = 0b00000000 
 .equ LED_ON = 0b11111111
+.equ LED_MAX = 0b11111111
+.equ LED_50 = 0b00001111
+.equ LED_25 = 0b00000011
 .equ SPEED_MAX = 0xFF
 
 .def row = r16; current row number
@@ -77,6 +80,7 @@
 .dseg
 mode: .byte 1 ; for storing the current mode
 timeCounter: .byte 2 ; Two bytes to check if 1 second has passed
+quartCounter: .byte 1 ; Check how many quarter seconds have passed
 rotCounter: .byte 2 ; Count for when to rotate
 takeInput: .byte 1 ; Ability to take input (for debouncing)
 input: .byte 1 ; Input for a particular loop
@@ -98,7 +102,6 @@ setPower: .byte 1 ; Check whether to get power level input
 
 .org OVF0addr
 	jmp Timer0
-
 
 RESET: 
 	; initialize the stack
@@ -184,15 +187,16 @@ RESET:
 	ldi temp1,(1<<CS50)
 	sts TCCR3B, temp1
 	ldi temp1, (1<< WGM30)| (1<<COM3B1)
-	sts TCCR3A, temp1	
+	sts TCCR3A, temp1
 
-	;initialise timer
+	; Initialise timer0
 	ldi temp1,0b00000000
 	out TCCR0A, temp1
 	ldi temp1, 0b00000010
 	out TCCR0B, temp1 ;Prescaling value = 8
 	ldi temp1, 1<<TOIE0 ;=128 ms
 	sts TIMSK0,temp1		;R/C0 interrupt enable
+
 	sei
 
 	ldi timerM, 0
@@ -221,9 +225,17 @@ RESET:
 	ldi temp1, DOOR_CLOSED
 	sts doorStatus, temp1
 
-
 	ldi temp1, 0
 	sts setPower, temp1
+
+	sts timeCounter, temp1
+	sts timeCounter + 1, temp1
+
+	sts quartCounter, temp1
+	
+	; Show inital 100% speed on LEDs
+	ldi temp1, LED_MAX
+	out PORTC, temp1	
 
 	; Default speed of 100%
 	ldi temp1, 100
@@ -395,7 +407,7 @@ Timer0:
 	cpi r26, low(RPM)
 	ldi temp1, high(RPM)
 	cpc r27, temp1
-	brne check_second
+	brne check_speed
 
 	clr r26
 	clr r27
@@ -406,13 +418,56 @@ Timer0:
 timer_end:
 	jmp end_timer0
 
+check_speed:
+	lds temp1, magnetronSpeed
+
+	cpi temp1,100
+	breq run_max
+
+	cpi temp1, 50
+	breq check_half_sec
+
+	cpi temp1, 25
+	breq check_quart_sec
+
+	cpi r24, low(QUARTER_SECOND)
+	ldi temp1, high(QUARTER_SECOND)
+	cpc r25, temp1
+	breq check_second
+	
+	jmp check_second
+
+check_half_sec:
+	cpi r24, low(HALF_SECOND)
+	ldi temp1, high(HALF_SECOND)
+	cpc r25, temp1
+	brlt run_max
+	
+	ldi temp1, 0
+	sts OCR3BL, temp1
+
+	jmp check_second
+
+check_quart_sec:
+	cpi r24, low(QUARTER_SECOND)
+	ldi temp1, high(QUARTER_SECOND)
+	cpc r25, temp1
+	brlt run_max
+	
+	ldi temp1, 0
+	sts OCR3BL, temp1
+
+	jmp check_second
+run_max:
+	ldi temp1, SPEED_MAX
+	sts OCR3BL, temp1
+	jmp check_second
+
 check_second:
 	cpi r24, low(SECOND)
 	ldi temp1, high(SECOND)
 	cpc r25, temp1
 	brne timer_end
-
-	; Todo motor control
 
 	; Second has passed
 	; Clear timeCounter
@@ -482,6 +537,10 @@ finished_timer:
 	; If no input then add 60 and return
 	cpi temp1, 0
 	breq add_min
+
+	; Turn off motor
+	ldi temp1, 0x00
+	sts OCR3BL, temp1
 
 	ldi temp1, FINISHED_MODE
 	sts mode, temp1
@@ -730,7 +789,7 @@ rowloop:
 	breq   nextcol     ; the row scan is over. 
 	mov   temp2, temp1     
 	and   temp2, temp3    ; check un-masked bit 
-	breq  convert       ; if bit is clear, the key is press
+	breq  press       ; if bit is clear, the key is press
 	inc   row      ; else move to the next row 
 	lsl   temp3       
 	jmp   rowloop 
@@ -739,21 +798,6 @@ nextcol:          ; if row scan is over
 	lsl temp4        
 	inc col       ; increase column value 
 	jmp colloop      ; go to the next column 
-
-; TODO: verify this
-convert:
-	cp r30, row	
-	brne press
-
-	cp r29, col
-	brne press
- 
- 	jmp goback
-
-goback:
-	ldi temp3,60
-	rcall sleepL
-	jmp press
 
 press:	
 	mov r30, row ;prev row
@@ -904,11 +948,12 @@ symbols:
 	cpi col, 0    ; Check if we have a star 
 	breq star
 	cpi col, 1    ; or if we have zero 
-	breq zero
+	breq jmp_zero
 
-	; Hash
 	cpi col, 2
 	brne input_return
+	; Hash
+	ldi temp3, '#'
 
 	lds temp1, setPower
 	cpi temp1, 1
@@ -927,6 +972,9 @@ symbols:
 	breq clear_time
 
 	jmp display_input
+
+jmp_zero:
+	jmp zero
 
 jmp_set_power2:
 	jmp set_power
@@ -948,9 +996,17 @@ running_pause:
 
 	jmp display_input
 
+input_return:
+	jmp display_input
+
 star: 
+	ldi temp3, '*'
 	lds temp1, mode
 	lds temp2, takeInput
+	lds temp4, setPower
+
+	cpi temp4, 1
+	breq goto_set_power
 
 	cpi temp2, 0
 	breq input_return
@@ -971,17 +1027,22 @@ star:
 	sts turnRotation, temp1
 	jmp input_loop
 
+goto_set_power:
+	jmp set_power
+
 set_anticlockwise:
 	ldi temp1, ANTI_CLOCKWISE	
 	sts turnRotation, temp1
 	jmp input_loop
 
-input_return:
-	jmp input_loop
-
 zero:
 	ldi temp3, 0    ; Set to zero
-	jmp convert_end 
+
+	lds temp1, setPower
+	cpi temp1, 1
+	breq set_power
+
+	jmp convert_end
 	
 ; Update timer to reflect input
 convert_end:
@@ -998,7 +1059,7 @@ convert_end:
 	inc counter
 
 	cpi counter, 5
-	brge sleep_loop
+	brge input_return
 	cpi counter, 3
 	breq update_minutes
 	cpi counter, 4
@@ -1040,23 +1101,7 @@ display_input:
 	;ldi timerS, 34
 	;ldi timerM, 12
 	rcall display_time
-	ldi temp3, 60 ; Wait 60 cycles before next input
-	rjmp sleep_loop
-
-sleep_loop:
-  	rcall sleep_5ms
-  	dec temp3
-  	cpi temp3, 0
-  	brne sleep_loop
-	jmp input_loop
-
-sleepL:
-	rcall sleep_5ms
-	rcall sleep_1ms
-  	dec temp3
-  	cpi temp3, 0
-  	brne sleepL
-	ret
+	rjmp input_loop
 
 set_power:
 	cpi temp3, 1
@@ -1071,6 +1116,9 @@ set_power:
 	cpi temp3, '#'
 	breq return_entry
 
+	; Otherwise, do nothing
+	jmp input_loop
+
 set_power_max:
 	clr temp3
 	ldi temp1, 0
@@ -1078,6 +1126,10 @@ set_power_max:
 	
 	ldi temp1, 100
 	sts magnetronSpeed, temp1
+
+	; Show speed on LEDs
+	ldi temp1, LED_MAX
+	out PORTC, temp1
 
 	jmp display_input
 
@@ -1089,6 +1141,10 @@ set_power_half:
 	ldi temp1, 50
 	sts magnetronSpeed, temp1
 
+	; Show speed on LEDs
+	ldi temp1, LED_50
+	out PORTC, temp1
+	
 	jmp display_input
 
 set_power_quart:
@@ -1098,6 +1154,10 @@ set_power_quart:
 	
 	ldi temp1, 25
 	sts magnetronSpeed, temp1
+
+	; Show speed on LEDs
+	ldi temp1, LED_25
+	out PORTC, temp1
 
 	jmp display_input
 
