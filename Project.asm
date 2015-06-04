@@ -24,8 +24,8 @@
 .equ RPM = 19530 ; 7812 * 60 / 24 ; 60s / 8 characters * 3 revolutions
 .equ DOOR_CLOSED = 0
 .equ DOOR_OPEN = 1
-.equ LED_OFF = 0b10000000
-.equ LED_ON = 0b11000000
+.equ LED_OFF = 0b00000000 
+.equ LED_ON = 0b11111111
 
 .def row = r16; current row number
 .def col = r17; current column number
@@ -90,6 +90,7 @@ doorStatus: .byte 1 ; Door open/closed
 .org 0x0002
 	jmp EXT_INT0
 	jmp EXT_INT1
+	jmp EXT_INT2
 
 .org OVF0addr
 	jmp Timer0
@@ -124,6 +125,15 @@ RESET:
 	ori temp1, (1<<INT1)
 	out EIMSK, temp1
 
+	; set INT2 as falling-edge triggered interrupt
+	ldi temp1, (2 << ISC20)
+	sts EICRA, temp1
+	in temp1, EIMSK
+	
+	; enable INT2
+	ori temp1, (1<<INT2)
+	out EIMSK, temp1
+
 	;initialise LCD
 	ser temp1
 	sts DDRk, temp1
@@ -149,6 +159,12 @@ RESET:
 	out DDRC, temp1
 	clr temp1
 	out PORTC, temp1
+
+	; set Port E as output for the top LED
+	ser temp1
+	out DDRF, temp1
+	clr temp1
+	out PORTF, temp1
 
 	;initialise timer
 	ldi temp1,0b00000000
@@ -311,7 +327,19 @@ set_entry:
 	sts mode, temp1
 	rcall display_time
 	
-	jmp finish_INT1	
+	jmp finish_INT1
+
+EXT_INT2:
+	push temp1
+	in temp1, SREG
+	push temp1
+
+	
+
+	pop temp1
+	out SREG, temp1
+	pop temp1
+	reti
 
 Timer0:	
 	push temp1
@@ -603,13 +631,13 @@ display_open:
 	print_char 'O'
 	; light top most LED
 	ldi temp1, LED_ON
-	out PORTC, temp1
+	out PORTF, temp1
 	jmp finish_display
 
 display_closed:
 	print_char 'C'
 	ldi temp1,LED_OFF
-	out PORTC, temp1
+	out PORTF, temp1
 	jmp finish_display
 
 finish_display:
