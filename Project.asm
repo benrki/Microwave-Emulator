@@ -84,7 +84,6 @@ quartCounter: .byte 1 ; Check how many quarter seconds have passed
 rotCounter: .byte 2 ; Count for when to rotate
 takeInput: .byte 1 ; Ability to take input (for debouncing)
 input: .byte 1 ; Input for a particular loop
-inputTime: .byte 2	;for storing the time of input
 enteredInput: .byte 1 ; Whether we have entered any numbers in the timer
 turnRotation: .byte 1 ; Last rotation direction of the turntable
 rotChar: .byte 1 ; Number of last rotation character
@@ -206,7 +205,6 @@ RESET:
 	rcall display_time
 
 	;clear up the data string
-	clear inputTime
 	clear mode
 
 	;clear register for entry
