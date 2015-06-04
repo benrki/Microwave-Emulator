@@ -9,6 +9,8 @@
 .equ PAUSED_MODE  = 2
 .equ FINISHED_MODE  = 3
 .equ SECOND = 7812 ; 10**6 / 128
+.equ QUARTER_SECOND = SECOND / 4
+.equ HALF_SECOND = SECOND / 2
 .equ LCD_RS = 7
 .equ LCD_E = 6
 .equ LCD_RW = 5
@@ -26,6 +28,7 @@
 .equ DOOR_OPEN = 1
 .equ LED_OFF = 0b00000000 
 .equ LED_ON = 0b11111111
+.equ SPEED_MAX = 0xFF
 
 .def row = r16; current row number
 .def col = r17; current column number
@@ -82,6 +85,8 @@ enteredInput: .byte 1 ; Whether we have entered any numbers in the timer
 turnRotation: .byte 1 ; Last rotation direction of the turntable
 rotChar: .byte 1 ; Number of last rotation character
 doorStatus: .byte 1 ; Door open/closed
+magnetronSpeed: .byte 1 ; Rotation speed % of the magnetron/motor
+setPower: .byte 1 ; Check whether to get power level input
 
 .cseg
 .org 0
@@ -90,7 +95,6 @@ doorStatus: .byte 1 ; Door open/closed
 .org 0x0002
 	jmp EXT_INT0
 	jmp EXT_INT1
-	jmp EXT_INT2
 
 .org OVF0addr
 	jmp Timer0
@@ -166,6 +170,22 @@ RESET:
 	clr temp1
 	out PORTF, temp1
 
+	; Motor port
+	ldi temp1, 0b00010000
+	out DDRE, temp1
+
+	ldi temp1, 0x00
+	sts OCR3BL, temp1
+
+	clr temp1
+	sts OCR3BH, temp1
+
+	; Set the Timer5 to Phase Correct PWM mode
+	ldi temp1,(1<<CS50)
+	sts TCCR3B, temp1
+	ldi temp1, (1<< WGM30)| (1<<COM3B1)
+	sts TCCR3A, temp1	
+
 	;initialise timer
 	ldi temp1,0b00000000
 	out TCCR0A, temp1
@@ -200,6 +220,14 @@ RESET:
 	; Set door closed by default
 	ldi temp1, DOOR_CLOSED
 	sts doorStatus, temp1
+
+
+	ldi temp1, 0
+	sts setPower, temp1
+
+	; Default speed of 100%
+	ldi temp1, 100
+	sts magnetronSpeed, temp1
 
 	; Jump straight to entry mode
 	jmp set_entry_mode
@@ -329,18 +357,6 @@ set_entry:
 	
 	jmp finish_INT1
 
-EXT_INT2:
-	push temp1
-	in temp1, SREG
-	push temp1
-
-	
-
-	pop temp1
-	out SREG, temp1
-	pop temp1
-	reti
-
 Timer0:	
 	push temp1
 	push temp2
@@ -395,6 +411,8 @@ check_second:
 	ldi temp1, high(SECOND)
 	cpc r25, temp1
 	brne timer_end
+
+	; Todo motor control
 
 	; Second has passed
 	; Clear timeCounter
@@ -759,7 +777,14 @@ press:
 
 	sts enteredInput, temp1
 	
+	lds temp1, setPower
+	cpi temp1, 1
+	breq jmp_set_power
+
 	jmp convert_end
+
+jmp_set_power:
+	jmp set_power
 
 jmp_symbols:
 	jmp symbols
@@ -779,7 +804,10 @@ letters:
 	jmp display_input
 
 letter_A:
-	ldi temp3, 'A'
+	;ldi temp3, 'A'
+	lds temp1, mode
+	cpi temp1, ENTRY_MODE
+	breq display_set_power
 	jmp convert_end
 
 letter_B:
@@ -840,6 +868,30 @@ directly_sub:
 goToInput:
 	jmp display_input
 
+display_set_power:
+	do_lcd_command 0b00000001 ; clear display
+	; Display 'Set Power 1/2/3'
+	print_char 'S'
+	print_char 'e'
+	print_char 't'
+	print_char ' '
+	print_char 'P'
+	print_char 'o'
+	print_char 'w'
+	print_char 'e'
+	print_char 'r'
+	print_char ' '
+	print_char '1'
+	print_char '/'
+	print_char '2'
+	print_char '/'
+	print_char '3'
+
+	ldi temp1, 1
+	sts setPower, temp1
+
+	jmp input_loop
+
 symbols:
 	; Check if we can take input
 	lds temp1, takeInput
@@ -857,6 +909,10 @@ symbols:
 	; Hash
 	cpi col, 2
 	brne input_return
+
+	lds temp1, setPower
+	cpi temp1, 1
+	breq jmp_set_power2
 		
 	; Check the mode
 	lds temp1, mode
@@ -871,6 +927,9 @@ symbols:
 	breq clear_time
 
 	jmp display_input
+
+jmp_set_power2:
+	jmp set_power
 
 ; Clears the current time
 clear_time:
@@ -922,7 +981,7 @@ input_return:
 
 zero:
 	ldi temp3, 0    ; Set to zero
-	rjmp convert_end 
+	jmp convert_end 
 	
 ; Update timer to reflect input
 convert_end:
@@ -999,9 +1058,57 @@ sleepL:
   	brne sleepL
 	ret
 
+set_power:
+	cpi temp3, 1
+	breq set_power_max
+
+	cpi temp3, 2
+	breq set_power_half
+
+	cpi temp3, 3
+	breq set_power_quart
+
+	cpi temp3, '#'
+	breq return_entry
+
+set_power_max:
+	clr temp3
+	ldi temp1, 0
+	sts setPower, temp1
+	
+	ldi temp1, 100
+	sts magnetronSpeed, temp1
+
+	jmp display_input
+
+set_power_half:
+	clr temp3
+	ldi temp1, 0
+	sts setPower, temp1
+	
+	ldi temp1, 50
+	sts magnetronSpeed, temp1
+
+	jmp display_input
+
+set_power_quart:
+	clr temp3
+	ldi temp1, 0
+	sts setPower, temp1
+	
+	ldi temp1, 25
+	sts magnetronSpeed, temp1
+
+	jmp display_input
+
+return_entry:
+	clr temp3
+	ldi temp1, 0
+	sts setPower, temp1
+	
+	ldi temp1, ENTRY_MODE
+	sts mode, temp1
+
+	jmp display_input
+
 ; End input loop
-
-
-
-
-
