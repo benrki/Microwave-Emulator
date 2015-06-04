@@ -24,8 +24,8 @@
 .equ RPM = 19530 ; 7812 * 60 / 24 ; 60s / 8 characters * 3 revolutions
 .equ DOOR_CLOSED = 0
 .equ DOOR_OPEN = 1
-.equ LED_OFF = 0b00000001
-.equ LED_ON = 0b00000011
+.equ LED_OFF = 0b10000000
+.equ LED_ON = 0b11000000
 
 .def row = r16; current row number
 .def col = r17; current column number
@@ -143,6 +143,12 @@ RESET:
 	do_lcd_command 0b00000110 ; increment, no display shift
 	do_lcd_command 0b00001110 ; Cursor on, bar, no blink
 
+	;intialise LED
+	; set Port C as output
+	ser temp1
+	out DDRC, temp1
+	clr temp1
+	out PORTC, temp1
 
 	;initialise timer
 	ldi temp1,0b00000000
@@ -595,11 +601,15 @@ display_door:
 
 display_open:
 	print_char 'O'
-	; todo: light top most LED
+	; light top most LED
+	ldi temp1, LED_ON
+	out PORTC, temp1
 	jmp finish_display
 
 display_closed:
 	print_char 'C'
+	ldi temp1,LED_OFF
+	out PORTC, temp1
 	jmp finish_display
 
 finish_display:
