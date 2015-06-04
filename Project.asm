@@ -377,7 +377,7 @@ Timer0:
 	; Do not dec timer if door open
 	lds temp1, doorStatus
 	cpi temp1, DOOR_OPEN
-	breq timer_end
+	breq stop_motor
 
 	; Do not dec timer if we're not in
 	; running mode
@@ -621,6 +621,7 @@ display_min:
 	; Finished displaying minutes, display seconds
 	clr temp1
 	rjmp display_sec
+
 divide_min:
 	inc temp1
 	subi timerM, 10
@@ -775,29 +776,30 @@ allow_input:
 	rjmp input_loop
 
 delay:
-	dec   temp1 
-	brne   delay 
+	dec temp1 
+	brne delay
 
-	lds  temp1, PINL    ; Read PORTL 
-	andi  temp1, ROWMASK    ; Get the keypad output value 
-	cpi   temp1, 0xF    ; Check if any row is low 
-	breq   nextcol 
-	      ; If yes, find which row is low 
-	ldi   temp3, INITROWMASK  ; Initialize for row check (temp3 = rmask)
-	clr  row      ; 
+	lds temp1, PINL    ; Read PORTL 
+	andi temp1, ROWMASK    ; Get the keypad output value 
+	cpi temp1, 0xF    ; Check if any row is low 
+	breq nextcol 
+
+	; If yes, find which row is low 
+	ldi temp3, INITROWMASK  ; Initialize for row check (temp3 = rmask)
+	clr row
 	rjmp rowloop
 
 rowloop: 
-	cpi   row, 4       
-	breq   nextcol     ; the row scan is over. 
-	mov   temp2, temp1     
-	and   temp2, temp3    ; check un-masked bit 
-	breq  press       ; if bit is clear, the key is press
-	inc   row      ; else move to the next row 
-	lsl   temp3       
-	jmp   rowloop 
+	cpi row, 4       
+	breq nextcol  ; the row scan is over. 
+	mov temp2, temp1     
+	and temp2, temp3 ; check un-masked bit 
+	breq press ; if bit is clear, the key is press
+	inc row ; else move to the next row 
+	lsl temp3
+	jmp rowloop 
 
-nextcol:          ; if row scan is over 
+nextcol: ; if row scan is over 
 	lsl temp4        
 	inc col       ; increase column value 
 	jmp colloop      ; go to the next column 
