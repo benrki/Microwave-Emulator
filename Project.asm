@@ -383,7 +383,7 @@ Timer0:
 	; running mode
 	lds temp1, mode
 	cpi temp1, RUNNING_MODE
-	brne timer_end
+	brne stop_motor
 
 	; Increment timeCounter
 	lds r24, timeCounter
@@ -409,6 +409,12 @@ Timer0:
 	sts rotCounter, r26
 	sts rotCounter + 1, r27
 	rjmp rotate_turntable
+
+stop_motor:
+	ldi temp1, 0
+	sts OCR3BL, temp1
+
+	jmp end_timer0
 
 timer_end:
 	jmp end_timer0
@@ -1019,7 +1025,7 @@ running_pause:
 	ldi temp4, PAUSED_MODE
 	sts mode, temp4
 
-	jmp display_input
+	jmp end_input_loop
 
 input_return:
 	jmp display_input
