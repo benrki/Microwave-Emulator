@@ -379,12 +379,15 @@ Timer0:
 	cpi temp1, DOOR_OPEN
 	breq stop_motor
 
+	lds temp1, FINISHED_MODE
+	breq jmp_finished_timer
+	
 	; Do not dec timer if we're not in
 	; running mode
 	lds temp1, mode
 	cpi temp1, RUNNING_MODE
 	brne stop_motor
-
+	
 	; Increment timeCounter
 	lds r24, timeCounter
 	lds r25, timeCounter + 1
@@ -392,6 +395,9 @@ Timer0:
 	sts timeCounter, r24
 	sts timeCounter + 1, r25
 
+	lds temp1, FINISHED_MODE
+	breq jmp_finished_timer
+	
 	; Increment the rotation counter
 	lds r26, rotCounter
 	lds r27, rotCounter + 1
@@ -409,6 +415,9 @@ Timer0:
 	sts rotCounter, r26
 	sts rotCounter + 1, r27
 	rjmp rotate_turntable
+
+jmp_finished_timer:
+	jmp finished_timer
 
 stop_motor:
 	ldi temp1, 0
@@ -569,7 +578,7 @@ finished_timer:
 	print_char 'o'
 	print_char 'd'
 
-	rjmp end_timer0
+	jmp end_timer0
 
 add_min:
 	ldi temp1, 1
@@ -621,7 +630,6 @@ display_min:
 	; Finished displaying minutes, display seconds
 	clr temp1
 	rjmp display_sec
-
 divide_min:
 	inc temp1
 	subi timerM, 10
@@ -776,43 +784,46 @@ allow_input:
 	rjmp input_loop
 
 delay:
-	dec temp1 
-	brne delay
+	dec   temp1 
+	brne   delay 
 
-	lds temp1, PINL    ; Read PORTL 
-	andi temp1, ROWMASK    ; Get the keypad output value 
-	cpi temp1, 0xF    ; Check if any row is low 
-	breq nextcol 
-
-	; If yes, find which row is low 
-	ldi temp3, INITROWMASK  ; Initialize for row check (temp3 = rmask)
-	clr row
+	lds  temp1, PINL    ; Read PORTL 
+	andi  temp1, ROWMASK    ; Get the keypad output value 
+	cpi   temp1, 0xF    ; Check if any row is low 
+	breq   nextcol 
+	      ; If yes, find which row is low 
+	ldi   temp3, INITROWMASK  ; Initialize for row check (temp3 = rmask)
+	clr  row      ; 
 	rjmp rowloop
 
 rowloop: 
-	cpi row, 4       
-	breq nextcol  ; the row scan is over. 
-	mov temp2, temp1     
-	and temp2, temp3 ; check un-masked bit 
-	breq press ; if bit is clear, the key is press
-	inc row ; else move to the next row 
-	lsl temp3
-	jmp rowloop 
+	cpi   row, 4       
+	breq   nextcol     ; the row scan is over. 
+	mov   temp2, temp1     
+	and   temp2, temp3    ; check un-masked bit 
+	breq  press       ; if bit is clear, the key is press
+	inc   row      ; else move to the next row 
+	lsl   temp3       
+	jmp   rowloop 
 
-nextcol: ; if row scan is over 
+nextcol:          ; if row scan is over 
 	lsl temp4        
 	inc col       ; increase column value 
 	jmp colloop      ; go to the next column 
 
 press:	
-	mov r30, row ;prev row
-	mov r29, col ;prev col
+	;mov r30, row ;prev row
+	;mov r29, col ;prev col
 
 	cpi   col, 3    ; If the pressed key is in col.3 
 	breq   letters    ; we have a letter 
 						; If the key is not in col.3 and  					   
 	cpi   row, 3    ; If the key is in row3,  
 	breq  jmp_symbols    ; we have a symbol or 0
+
+	lds temp1, mode
+	cpi temp1, FINISHED_MODE
+	breq jmp_input_return
 
 	; Numbers
 	mov temp3, row  ; Otherwise we have a number in 1-9 
@@ -839,7 +850,14 @@ jmp_set_power:
 jmp_symbols:
 	jmp symbols
 
+jmp_input_return:
+	jmp input_loop
+
 letters:
+	lds temp1, mode
+	cpi temp1, FINISHED_MODE
+	breq jmp_input_return
+
 	ldi temp1, 1
 	sts input, temp1
 
@@ -981,7 +999,7 @@ symbols:
 	breq jmp_zero
 
 	cpi col, 2
-	brne input_return
+	brne input_display2
 	; Hash
 	ldi temp3, '#'
 
@@ -1000,8 +1018,22 @@ symbols:
 
 	cpi temp1, PAUSED_MODE
 	breq clear_time
+	
+	cpi temp1, FINISHED_MODE
+	breq back_to_set_entry
 
 	jmp display_input
+
+input_display2:
+	jmp display_input
+
+back_to_set_entry:	
+	ldi temp1, ENTRY_MODE
+	sts mode, temp1
+
+	rcall display_time
+	
+	jmp input_loop
 
 jmp_zero:
 	jmp zero
@@ -1023,16 +1055,19 @@ clear_time:
 	clr timerS
 	jmp display_input
 
+
 running_pause:
 	ldi temp4, PAUSED_MODE
 	sts mode, temp4
 
 	jmp end_input_loop
 
-input_return:
-	jmp display_input
 
 star: 
+	lds temp1, mode
+	cpi temp1, FINISHED_MODE
+	breq jmp_input_return2
+
 	ldi temp3, '*'
 	lds temp1, mode
 	lds temp2, takeInput
@@ -1042,7 +1077,7 @@ star:
 	breq goto_set_power
 
 	cpi temp2, 0
-	breq input_return
+	breq input_display
 	
 	ldi temp2, 1
 	sts input, temp2
@@ -1068,7 +1103,18 @@ set_anticlockwise:
 	sts turnRotation, temp1
 	jmp input_loop
 
+jmp_input_return2:
+	jmp input_loop
+
+
+input_display:
+	jmp display_input
+
 zero:
+	lds temp1, mode
+	cpi temp1, FINISHED_MODE
+	breq jmp_input_return2
+
 	ldi temp3, 0    ; Set to zero
 
 	lds temp1, setPower
@@ -1076,7 +1122,8 @@ zero:
 	breq set_power
 
 	jmp convert_end
-	
+
+
 ; Update timer to reflect input
 convert_end:
 	clr temp1
@@ -1092,7 +1139,7 @@ convert_end:
 	inc counter
 
 	cpi counter, 5
-	brge input_return
+	brge input_display
 	cpi counter, 3
 	breq update_minutes
 	cpi counter, 4
