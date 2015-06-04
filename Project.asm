@@ -317,7 +317,18 @@ EXT_INT0:
 	push temp1
 	in temp1, SREG
 	push temp1
+	
+	;check door has opened or not
+	lds temp1, doorStatus
+	cpi temp1, DOOR_OPEN
+	brne finished_INT0
 
+	;after finish mode set enteredInput back to 0 
+	;if there is no input in next time, we can still run the microwave
+	ldi temp1, 0
+	sts enteredInput,temp1
+	
+finished_INT0:
 	ldi temp1, DOOR_CLOSED
 	sts doorStatus, temp1
 
@@ -342,6 +353,7 @@ EXT_INT1:
 	ldi temp1, DOOR_OPEN
 	sts doorStatus, temp1
 
+	;check is finished mode
 	lds temp1, mode
 	cpi temp1, FINISHED_MODE
 	breq set_entry
@@ -379,6 +391,7 @@ Timer0:
 	cpi temp1, DOOR_OPEN
 	breq stop_motor
 
+	;check is finished mode, if still is finished mode should do nothing
 	lds temp1, FINISHED_MODE
 	breq jmp_finished_timer
 	
@@ -395,9 +408,6 @@ Timer0:
 	sts timeCounter, r24
 	sts timeCounter + 1, r25
 
-	lds temp1, FINISHED_MODE
-	breq jmp_finished_timer
-	
 	; Increment the rotation counter
 	lds r26, rotCounter
 	lds r27, rotCounter + 1
@@ -821,6 +831,7 @@ press:
 	cpi   row, 3    ; If the key is in row3,  
 	breq  jmp_symbols    ; we have a symbol or 0
 
+	;check finished mode or not, if it is, do not get any input
 	lds temp1, mode
 	cpi temp1, FINISHED_MODE
 	breq jmp_input_return
@@ -854,6 +865,7 @@ jmp_input_return:
 	jmp input_loop
 
 letters:
+	;check finished mode or not, if it is, do not get any input
 	lds temp1, mode
 	cpi temp1, FINISHED_MODE
 	breq jmp_input_return
@@ -1019,6 +1031,7 @@ symbols:
 	cpi temp1, PAUSED_MODE
 	breq clear_time
 	
+	;check finished mode or not
 	cpi temp1, FINISHED_MODE
 	breq back_to_set_entry
 
@@ -1027,7 +1040,8 @@ symbols:
 input_display2:
 	jmp display_input
 
-back_to_set_entry:	
+back_to_set_entry:
+	;if in the finished mode, then clr data and go back to entry mode	
 	ldi temp1, ENTRY_MODE
 	sts mode, temp1
 
@@ -1064,8 +1078,12 @@ running_pause:
 
 
 star: 
+	;check finished mode or not, if it is, do not get any input
 	lds temp1, mode
 	cpi temp1, FINISHED_MODE
+	breq jmp_input_return2
+
+	cpi temp1, RUNNING_MODE
 	breq jmp_input_return2
 
 	ldi temp3, '*'
@@ -1111,6 +1129,7 @@ input_display:
 	jmp display_input
 
 zero:
+	;check finished mode or not, if it is, do not get any input
 	lds temp1, mode
 	cpi temp1, FINISHED_MODE
 	breq jmp_input_return2
