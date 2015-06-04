@@ -198,19 +198,16 @@ RESET:
 
 	sei
 
-	ldi timerM, 0
-	ldi timerS, 0
-	
-	; Display 00:00
-	rcall display_time
-
-	;clear up the data string
-	clear mode
-
-	;clear register for entry
+	;clear up our initialisation variables
 	clr counter
 	clr r30
 	clr r29
+	clr timerM
+	clr timerS
+	clear mode
+
+	; Display 00:00
+	rcall display_time
 
 	; Set last spin as anti-clockwise so the first
 	; rotation is clockwise
@@ -569,6 +566,8 @@ finished_timer:
 	rjmp end_timer0
 
 add_min:
+	ldi temp1, 1
+	sts enteredInput, temp1
 	ldi timerS, 59
 	rcall display_time
 	rjmp end_timer0
@@ -816,12 +815,13 @@ press:
 
 	ldi temp1, 1
 	sts input, temp1
-
-	sts enteredInput, temp1
 	
 	lds temp1, setPower
 	cpi temp1, 1
 	breq jmp_set_power
+
+	ldi temp1, 1
+	sts enteredInput, temp1
 
 	jmp convert_end
 
@@ -849,25 +849,49 @@ letter_A:
 	;ldi temp3, 'A'
 	lds temp1, mode
 	cpi temp1, ENTRY_MODE
-	breq display_set_power
-	jmp convert_end
+	brne end_letter
+
+	jmp display_set_power
 
 letter_B:
-	ldi temp3, 'B'
-	jmp convert_end	
+	;ldi temp3, 'B'
+
+	jmp end_letter
 
 letter_C:
+	lds temp1, takeInput
+	cpi temp1, 0
+	breq end_letter
+
+	ldi temp1, 0
+	sts takeInput, temp1
+
+	ldi temp1, 1
+	sts input, temp1
+	
 	lds temp2, mode
 	cpi temp2, RUNNING_MODE
 	breq add_30sec
-	jmp input_loop	
-
+	jmp end_letter
 
 letter_D:
-	lds temp2,mode
+	lds temp1, takeInput
+	cpi temp1, 0
+	breq end_letter
+
+	ldi temp1, 0
+	sts takeInput, temp1
+
+	ldi temp1, 1
+	sts input, temp1
+
+	lds temp2, mode
 	cpi temp2, RUNNING_MODE
 	breq sub_30sec
-	jmp input_loop	
+	jmp end_letter
+
+end_letter:
+	jmp end_input_loop
 
 add_30sec:
 	cpi timerS, 30		;check timerS less than 30 or not
@@ -932,7 +956,7 @@ display_set_power:
 	ldi temp1, 1
 	sts setPower, temp1
 
-	jmp input_loop
+	jmp end_letter
 
 symbols:
 	; Check if we can take input
@@ -981,6 +1005,9 @@ jmp_set_power2:
 clear_time:
 	ldi temp1, ENTRY_MODE
 	sts mode, temp1
+
+	ldi temp1, 0
+	sts enteredInput, temp1
 
 	clr counter
 	clr temp3
@@ -1095,9 +1122,6 @@ update_minutes2:
 	rjmp update_minutes
 
 display_input:
-	; tests	
-	;ldi timerS, 34
-	;ldi timerM, 12
 	rcall display_time
 	rjmp input_loop
 
