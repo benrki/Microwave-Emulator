@@ -312,37 +312,53 @@ sleep_5ms:
 ; Interrupts
 
 ; Button on the right
+; Set up the entry mode after the finished mode
 ; Close door
 EXT_INT0:
 	push temp1
 	in temp1, SREG
 	push temp1
-	
-	;check door has opened or not
-	lds temp1, doorStatus
-	cpi temp1, DOOR_OPEN
-	brne finished_INT0
 
-	;after finish mode set enteredInput back to 0 
-	;if there is no input in next time, we can still run the microwave
-	ldi temp1, 0
-	sts enteredInput,temp1
+	;check is it in finished mode or not
+	lds temp1, mode
+	cpi temp1, FINISHED_MODE
+	breq set_entry_INT0
 	
-finished_INT0:
+	;if it is other mode just set up door closed
+	rcall display_time
+	jmp finish_INT0
+
+finish_INT0:
 	ldi temp1, DOOR_CLOSED
 	sts doorStatus, temp1
-
-	rcall display_time
 
 	pop temp1
 	out SREG, temp1
 	pop temp1
 
 	reti
+
+set_entry_INT0:
+	;check door has opened or not
+	lds temp1, doorStatus
+	cpi temp1, DOOR_OPEN
+	brne finish_INT0	;if the door haven't been opened do nothing
+	
+	;after finish mode the door have been opened
+	;set entry
+	ldi temp1, ENTRY_MODE
+	sts mode, temp1
+	clr counter
+	;after finish mode set enteredInput back to 0 
+	;if there is no input in next time, we can still run the microwave
+	ldi temp1, 0
+	sts enteredInput,temp1
+			
+	jmp finish_INT0
 	
 ; Button on the left
 ; Open door
-; When finished, will enter entry mode
+; When finished, will enter the display of entry mode
 ; As in assignment spec, and display 00:00
 ; But can't take input until door is closed!
 EXT_INT1:
@@ -356,7 +372,7 @@ EXT_INT1:
 	;check is finished mode
 	lds temp1, mode
 	cpi temp1, FINISHED_MODE
-	breq set_entry
+	breq set_entry_INT1
 
 	rcall display_time
 
@@ -369,11 +385,11 @@ finish_INT1:
 
 	reti
 
-set_entry:
-	ldi temp1, ENTRY_MODE
-	sts mode, temp1
+set_entry_INT1:
+
+	;back to the display of entry mode
 	rcall display_time
-	
+
 	jmp finish_INT1
 
 Timer0:	
@@ -1044,6 +1060,7 @@ back_to_set_entry:
 	;if in the finished mode, then clr data and go back to entry mode	
 	ldi temp1, ENTRY_MODE
 	sts mode, temp1
+	clr counter
 
 	rcall display_time
 	
